@@ -1,10 +1,16 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import sys
 from typing import Any
 
 import plotly.graph_objects as go
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
+
+dashboard_dir = str(Path(__file__).resolve().parent)
+if dashboard_dir not in sys.path:
+    sys.path.insert(0, dashboard_dir)
 
 from adafruit_client import fetch_telemetry_history
 from monitor_logic import detect_rapid_drop
