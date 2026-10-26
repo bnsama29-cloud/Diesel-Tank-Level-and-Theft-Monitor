@@ -38,6 +38,7 @@ int historyCount = 0;
 unsigned long lastSampleTime = 0;
 unsigned long lastLcdTime = 0;
 unsigned long lastCloudPublish = 0;
+unsigned long lastStatusLog = 0;
 
 float distanceCm = 0.0f;
 float levelPct = 0.0f;
@@ -92,12 +93,25 @@ void updatePump() {
 }
 
 void updateIndicators() {
-  const bool low = sensorOK && levelPct < 20.0f;
+  const bool low = sensorOK && levelPct <= 20.0f;
   const bool full = sensorOK && levelPct > 90.0f;
   const bool medium = sensorOK && !low && !full;
   digitalWrite(LED_LOW, low ? HIGH : LOW);
   digitalWrite(LED_MEDIUM, medium ? HIGH : LOW);
   digitalWrite(LED_FULL, full ? HIGH : LOW);
+}
+
+void logLocalStatus() {
+  const unsigned long now = millis();
+  if (now - lastStatusLog < 1000UL) return;
+  lastStatusLog = now;
+  Serial.printf(
+      "Sensor:%s Distance:%.1f cm Level:%.1f%% Fuel:%.1f L "
+      "LED low/med/full:%d/%d/%d Generator:%s Pump:%s Theft:%s\n",
+      sensorOK ? "OK" : "ERROR", distanceCm, levelPct, litres,
+      digitalRead(LED_LOW), digitalRead(LED_MEDIUM), digitalRead(LED_FULL),
+      generatorOn ? "ON" : "OFF", pumpOn ? "ON" : "OFF",
+      theftAlarm ? "YES" : "NO");
 }
 
 int oldestSampleAtLeast(unsigned long minimumAge, unsigned long now,
@@ -238,6 +252,17 @@ void setup() {
   digitalWrite(RELAY_PIN, relayLevel(false));
 
   Wire.begin(LCD_SDA, LCD_SCL);
+  Wire.setClock(100000);
+  bool lcdFound = false;
+  for (uint8_t address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("I2C device found at 0x%02X\n", address);
+      if (address == 0x27) lcdFound = true;
+    }
+  }
+  Serial.println(lcdFound ? "LCD at 0x27 detected."
+                          : "LCD at 0x27 NOT detected; check SDA/SCL/VCC/GND.");
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0); lcd.print("Tank Monitor");
@@ -261,6 +286,7 @@ void loop() {
 
   digitalWrite(BUZZER_PIN, theftAlarm ? HIGH : LOW);
   updateDisplay();
+  logLocalStatus();
   publishTelemetry();
   delay(50);
 }
