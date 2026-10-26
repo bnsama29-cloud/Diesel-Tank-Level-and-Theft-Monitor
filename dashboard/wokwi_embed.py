@@ -5,7 +5,7 @@ def build_wokwi_embed_html() -> str:
     return f"""
     <style>
       * {{ box-sizing: border-box; }}
-      body {{ margin: 0; background: #101923; color: #d9e6f2; font: 13px system-ui, sans-serif; }}
+      body {{ margin: 0; background: #101923; color: #d9e6f2; font: 11px system-ui, sans-serif; }}
       #simulation-frame {{
         height: min(540px, calc(100vh - 150px));
         width: 100%;
@@ -30,7 +30,8 @@ def build_wokwi_embed_html() -> str:
         background: #23455f;
         border: 1px solid #507895;
         border-radius: 6px;
-        padding: 5px 10px;
+        padding: 4px 8px;
+        font: inherit;
         cursor: pointer;
       }}
       #wokwi-project {{ display: block; width: 100%; height: calc(100% - 38px); border: 0; }}

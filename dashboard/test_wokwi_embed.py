@@ -8,6 +8,7 @@ class WokwiEmbedTests(unittest.TestCase):
         html = build_wokwi_embed_html()
         self.assertIn('resize: both', html)
         self.assertIn('width: 100%', html)
+        self.assertIn('font: 11px system-ui', html)
         self.assertIn('id="fullscreen-simulation"', html)
         self.assertIn("requestFullscreen()", html)
         self.assertIn(f'src="{WOKWI_EMBED_URL}"', html)

@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import hmac
 from pathlib import Path
 import time
 
@@ -9,12 +8,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from adafruit_client import (
-    decode_remote_command,
-    encode_remote_command,
-    fetch_latest_command,
     fetch_latest_feed,
     fetch_level_history,
-    publish_command,
 )
 from monitor_logic import detect_rapid_drop
 from tank_view import build_tank_html
@@ -57,16 +52,6 @@ def render_tank(level: float, litres: float) -> None:
     components.html(html, height=390, scrolling=False)
 
 
-def unlock_control_session() -> None:
-    supplied = st.session_state.get("control-password", "")
-    expected = st.secrets.get("CONTROL_PASSWORD", "")
-    st.session_state.controls_unlocked = bool(
-        expected and hmac.compare_digest(supplied, expected)
-    )
-    st.session_state.control_password_invalid = not st.session_state.controls_unlocked
-    st.session_state["control-password"] = ""
-
-
 def load_telemetry(username: str, aio_key: str):
     readings = {
         feed: fetch_latest_feed(username, aio_key, feed)
@@ -81,13 +66,22 @@ def render_live_panel(username: str, aio_key: str) -> None:
     try:
         readings, level_history = load_telemetry(username, aio_key)
     except (requests.RequestException, ValueError) as exc:
+        status_column, records_column = st.columns([0.95, 1.05], gap="medium")
         error_message = str(exc)
         if st.session_state.get("last_telemetry_error") != error_message:
             append_event(f"Telemetry read failed: {error_message}")
             st.session_state.last_telemetry_error = error_message
-        st.error(f"Could not load live telemetry. Check the Wokwi connection and feeds. Details: {exc}")
-        st.caption("The Wokwi simulation remains running; this live panel will retry automatically.")
-        render_event_log()
+        with status_column:
+            st.error(
+                f"Could not load live telemetry. Check the Wokwi connection and feeds. "
+                f"Details: {exc}"
+            )
+            st.caption(
+                "Wokwi remains running; this panel will retry automatically."
+            )
+        with records_column:
+            st.subheader("Recent activity")
+            render_event_log()
         return
 
     if st.session_state.pop("last_telemetry_error", None):
@@ -99,10 +93,6 @@ def render_live_panel(username: str, aio_key: str) -> None:
         0, int((datetime.now(timezone.utc) - latest_timestamp).total_seconds())
     )
     connected = age_seconds < 90
-    st.caption(
-        f"{'🟢 LIVE' if connected else '⚪ STALE'} · "
-        f"Latest telemetry {age_seconds} seconds ago · Auto-refreshes every 20 seconds"
-    )
 
     distance = values["distance"]
     raw_level = values["level"]
@@ -197,49 +187,92 @@ def render_live_panel(username: str, aio_key: str) -> None:
         append_event("THEFT alert: rapid unexplained level drop detected.")
     st.session_state.previous_combined_alarm = alarm
 
-    st.subheader("Live status")
-    level_label = f"{level:.1f}%" if level is not None else "INVALID"
-    litres_label = f"{litres:.1f} L" if litres is not None else "INVALID"
-    first, second, third, fourth = st.columns(4)
-    first.metric("Tank level", level_label, level_status)
-    second.metric("Fuel volume", litres_label, f"of {TANK_CAPACITY_LITRES:.0f} L")
-    third.metric("Generator", "RUNNING" if generator_on else "STOPPED")
-    fourth.metric("Refill pump", "ON" if pump_on else "OFF")
-
-    if invalid_level:
-        st.warning(
-            f"Adafruit returned level={raw_level:g}, outside the valid 0–100% range. "
-            + (
-                f"Showing {safe_level:.1f}% calculated from sensor distance."
-                if level is not None
-                else "Distance is invalid, so the level is not displayed."
-            )
+    status_column, records_column = st.columns([0.95, 1.05], gap="medium")
+    with status_column:
+        st.subheader("Live status")
+        st.caption(
+            f"{'🟢 LIVE' if connected else '⚪ STALE'} · "
+            f"Updated {age_seconds}s ago · refreshes every 20s"
         )
-    if invalid_litres:
-        st.warning(
-            f"Adafruit returned litres={raw_litres:g}, outside the valid 0–500 L range. "
-            + (
-                f"Showing {safe_litres:.1f} L calculated from level."
-                if litres is not None
-                else "Fuel volume is not displayed."
-            )
+        level_label = f"{level:.1f}%" if level is not None else "INVALID"
+        litres_label = f"{litres:.1f} L" if litres is not None else "INVALID"
+        top_metrics = st.columns(2, gap="small")
+        bottom_metrics = st.columns(2, gap="small")
+        top_metrics[0].metric("Tank level", level_label, level_status)
+        top_metrics[1].metric(
+            "Fuel volume", litres_label, f"of {TANK_CAPACITY_LITRES:.0f} L"
         )
-    if alarm:
-        st.error("🚨 THEFT ALERT · Rapid unexplained tank-level drop detected.")
-    else:
-        st.success("✅ No theft alarm reported.")
+        bottom_metrics[0].metric(
+            "Generator", "RUNNING" if generator_on else "STOPPED"
+        )
+        bottom_metrics[1].metric("Refill pump", "ON" if pump_on else "OFF")
 
-    st.subheader("Recent activity log")
-    render_event_log()
+        if invalid_level:
+            st.warning(
+                f"Adafruit returned level={raw_level:g}, outside the valid 0–100% range. "
+                + (
+                    f"Showing {safe_level:.1f}% calculated from sensor distance."
+                    if level is not None
+                    else "Distance is invalid, so the level is not displayed."
+                )
+            )
+        if invalid_litres:
+            st.warning(
+                f"Adafruit returned litres={raw_litres:g}, outside the valid 0–500 L range. "
+                + (
+                    f"Showing {safe_litres:.1f} L calculated from level."
+                    if litres is not None
+                    else "Fuel volume is not displayed."
+                )
+            )
+        if alarm:
+            st.error("🚨 THEFT ALERT · Rapid unexplained tank-level drop detected.")
+        else:
+            st.success("✅ No theft alarm reported.")
 
-    left, right = st.columns([1, 1.2], gap="large")
-    with left:
         st.subheader("3D diesel chamber")
         if level is None:
             st.info("3D fuel level is unavailable until a valid sensor reading arrives.")
         else:
             render_tank(safe_level, safe_litres)
-    with right:
+
+        st.subheader("Operating state")
+        st.write(f"**Sensor distance:** {distance:.1f} cm")
+        st.write(f"**Generator:** {'🟢 ON' if generator_on else '⚪ OFF'}")
+        st.write(f"**Pump relay:** {'🟢 ON' if pump_on else '⚪ OFF'}")
+        st.write(f"**Alarm:** {'🔴 THEFT?' if alarm else '🟢 Clear'}")
+
+        hours_left = values["hours-left"]
+        st.subheader("Consumption estimate")
+        st.write(
+            "**Estimated hours left:** "
+            + (f"{hours_left:.1f} h" if hours_left >= 0 else "Not available yet")
+        )
+        st.caption(
+            "The firmware estimates consumption only after it has a usable trend."
+        )
+
+    with records_column:
+        st.subheader("Live feed records")
+        st.dataframe(
+            [
+                {
+                    "Feed": FEEDS[feed],
+                    "Value": f"{readings[feed][0]:.2f}",
+                    "Updated": readings[feed][1]
+                    .astimezone()
+                    .strftime("%H:%M:%S"),
+                }
+                for feed in FEEDS
+            ],
+            hide_index=True,
+            use_container_width=True,
+            height=270,
+        )
+
+        st.subheader("Recent activity")
+        render_event_log()
+
         st.subheader("Fuel level history")
         valid_history = [
             reading
@@ -279,41 +312,6 @@ def render_live_panel(username: str, aio_key: str) -> None:
                 st.info("Not enough readings in this time range to draw the graph.")
         else:
             st.info("The graph appears after two valid level readings.")
-
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Operating state")
-        st.write(f"**Sensor distance:** {distance:.1f} cm")
-        st.write(f"**Generator:** {'🟢 ON' if generator_on else '⚪ OFF'}")
-        st.write(f"**Pump relay:** {'🟢 ON' if pump_on else '⚪ OFF'}")
-        st.write(f"**Alarm:** {'🔴 THEFT?' if alarm else '🟢 Clear'}")
-    with right:
-        hours_left = values["hours-left"]
-        st.subheader("Consumption estimate")
-        st.write(
-            "**Estimated hours left:** "
-            + (f"{hours_left:.1f} h" if hours_left >= 0 else "Not available yet")
-        )
-        st.caption(
-            "The firmware estimates consumption only after it has a usable trend."
-        )
-
-    with st.expander("Latest telemetry feed records"):
-        st.dataframe(
-            [
-                {
-                    "Feed": FEEDS[feed],
-                    "Value": f"{readings[feed][0]:.2f}",
-                    "Updated": readings[feed][1]
-                    .astimezone()
-                    .strftime("%Y-%m-%d %H:%M:%S %Z"),
-                }
-                for feed in FEEDS
-            ],
-            hide_index=True,
-            use_container_width=True,
-        )
-
 
 def render_event_log() -> None:
     events = st.session_state.get("dashboard_events", [])
@@ -377,87 +375,10 @@ def build_level_chart(visible_history: list[dict]) -> go.Figure:
     return fig
 
 
-@st.fragment
-def render_controls(username: str, aio_key: str) -> None:
-    st.subheader("Simulation controls")
-    st.caption(
-        "Dashboard inputs control ESP32 logic. The Wokwi graphics do not move remotely."
-    )
-    control_password = st.secrets.get("CONTROL_PASSWORD", "")
-    if not control_password:
-        st.error("Set the private CONTROL_PASSWORD app secret to unlock controls.")
-        return
-    if not st.session_state.get("controls_unlocked", False):
-        st.text_input("Control password", type="password", key="control-password")
-        st.button("Unlock controls", on_click=unlock_control_session)
-        if st.session_state.get("control_password_invalid", False):
-            st.error("Incorrect control password.")
-        return
-
-    try:
-        command_reading = fetch_latest_command(username, aio_key)
-    except (requests.RequestException, ValueError) as exc:
-        st.error(f"Could not read command feed: {exc}")
-        return
-
-    remote_command = (
-        decode_remote_command(command_reading[0])
-        if command_reading is not None
-        else None
-    )
-    st.info(
-        "Input source: "
-        + ("Dashboard virtual inputs" if remote_command else "Wokwi controls")
-    )
-    if "control_distance" not in st.session_state:
-        st.session_state.control_distance = (
-            remote_command[0] if remote_command else 55.0
-        )
-    if "control_generator" not in st.session_state:
-        st.session_state.control_generator = (
-            remote_command[1] if remote_command else False
-        )
-    with st.form("simulation-controls"):
-        st.slider(
-            "Virtual sensor distance",
-            min_value=5.0,
-            max_value=105.0,
-            step=0.5,
-            key="control_distance",
-            help="5 cm is full; 105 cm is empty.",
-        )
-        st.toggle("Generator running", key="control_generator")
-        apply_inputs = st.form_submit_button("Apply dashboard inputs")
-    release_inputs = st.button("Return control to Wokwi")
-    if apply_inputs:
-        try:
-            code = encode_remote_command(
-                st.session_state.control_distance,
-                st.session_state.control_generator,
-            )
-            publish_command(username, aio_key, code)
-            append_event(
-                f"Dashboard command sent: {st.session_state.control_distance:.1f} cm, "
-                f"generator {'ON' if st.session_state.control_generator else 'OFF'}."
-            )
-            st.success("Command sent; Wokwi checks for it within 10 seconds.")
-        except (requests.RequestException, ValueError) as exc:
-            append_event(f"Dashboard command failed: {exc}")
-            st.error(f"Could not send simulation controls: {exc}")
-    if release_inputs:
-        try:
-            publish_command(username, aio_key, 0)
-            append_event("Dashboard released virtual inputs to Wokwi.")
-            st.success("Control released. Wokwi inputs are active again.")
-        except requests.RequestException as exc:
-            append_event(f"Control release failed: {exc}")
-            st.error(f"Could not release dashboard controls: {exc}")
-
-
 def render_wokwi() -> None:
     components.html(
         build_wokwi_embed_html(),
-        height=580,
+        height=650,
         scrolling=False,
     )
 
@@ -472,25 +393,30 @@ st.markdown(
     """
     <style>
       .stApp { background: radial-gradient(ellipse at 15% 0%, #17324a 0, #0b1220 42%); }
-      .block-container { max-width: 1680px; padding-top: 1.4rem; }
+      .block-container { max-width: 1880px; padding-top: 1.4rem; }
       h1, h2, h3 { letter-spacing: -0.025em; }
       div[data-testid="stMetric"] {
         background: linear-gradient(145deg, rgba(25,46,67,.96), rgba(15,27,42,.96));
         border: 1px solid rgba(125,175,210,.18);
-        border-radius: 16px;
-        padding: 14px 16px;
+        border-radius: 14px;
+        padding: 9px 10px;
         box-shadow: 0 12px 30px rgba(0,0,0,.16);
       }
-      div[data-testid="stMetricLabel"] { color: #9eb5c9; }
-      div[data-testid="stMetricValue"] { color: #f2f8fc; }
+      div[data-testid="stMetricLabel"] { color: #9eb5c9; font-size: .78rem; }
+      div[data-testid="stMetricValue"] { color: #f2f8fc; font-size: 1.35rem; }
+      div[data-testid="stMetricDelta"] { font-size: .72rem !important; line-height: 1rem; }
+      div[data-testid="stMetricDelta"] svg { width: .72rem; height: .72rem; }
       .hero-note { color: #91a8bc; margin-top: -.5rem; }
       [data-testid="stAlert"] { border-radius: 14px; }
       @media (max-width: 700px) {
         .block-container { padding: 1rem .8rem 2rem; }
         h1 { font-size: 1.65rem !important; }
         h2 { font-size: 1.25rem !important; }
-        div[data-testid="stMetric"] { padding: 12px; }
-        div[data-testid="stMetricValue"] { font-size: 1.2rem; }
+        div[data-testid="stMetric"] { padding: 8px; }
+        div[data-testid="stMetricLabel"] { font-size: .7rem; }
+        div[data-testid="stMetricValue"] { font-size: 1.1rem; }
+        div[data-testid="stMetricDelta"] { font-size: .65rem !important; }
+        div[data-testid="stMetricDelta"] svg { width: .65rem; height: .65rem; }
       }
     </style>
     """,
@@ -500,7 +426,7 @@ st.title("⛽ Diesel Tank Monitor")
 mobile_view = st.query_params.get("view", "desktop") == "mobile"
 st.markdown(
     '<div class="hero-note">'
-    + ("Read-only live monitor" if mobile_view else "Live control room")
+    + ("Read-only live monitor" if mobile_view else "Wokwi simulation · Live monitor")
     + " · 500 L diesel chamber</div>",
     unsafe_allow_html=True,
 )
@@ -518,15 +444,13 @@ except (KeyError, FileNotFoundError):
 if mobile_view:
     render_live_panel(username, aio_key)
 else:
-    st.caption("Desktop controls, activity log, live 3D chamber, and Wokwi simulation.")
-    live_column, simulation_column = st.columns([1.2, 0.8], gap="large")
-    with live_column:
+    dashboard_column, simulation_column = st.columns([2.0, 1.0], gap="large")
+    with dashboard_column:
         render_live_panel(username, aio_key)
     with simulation_column:
-        render_controls(username, aio_key)
         st.subheader("Wokwi simulation")
         st.caption(
-            "The simulation stays mounted while live data refreshes. Drag its lower-right "
-            "corner to resize or use Enlarge for full-screen controls."
+            "Operate the sensor slider and generator switch in Wokwi. "
+            "Drag the lower-right corner to resize or use Enlarge for fullscreen."
         )
         render_wokwi()
