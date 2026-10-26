@@ -11,7 +11,7 @@ dashboard_dir = str(Path(__file__).resolve().parent)
 if dashboard_dir not in sys.path:
     sys.path.insert(0, dashboard_dir)
 
-from adafruit_client import fetch_telemetry_history
+from adafruit_client import fetch_telemetry_history, post_manual_acknowledgment
 from monitor_logic import detect_rapid_drop
 from resizable_dashboard import render_resizable_dashboard
 
@@ -71,6 +71,26 @@ def theft_marker_readings(history: list[dict[str, Any]]) -> list[dict[str, Any]]
             markers.append(reading)
         previous_dashboard_alarm = dashboard_alarm
     return markers
+
+
+def acknowledge_manual_reading(
+    username: str,
+    key: str,
+    feed: str,
+    reading: dict[str, Any],
+) -> str | None:
+    request_id = reading.get("manual_request_id", 0)
+    if (
+        not request_id
+        or st.session_state.get("last_acknowledged_manual_id") == request_id
+    ):
+        return None
+    try:
+        post_manual_acknowledgment(username, key, feed, request_id)
+    except (requests.RequestException, ValueError) as exc:
+        return str(exc)
+    st.session_state.last_acknowledged_manual_id = request_id
+    return None
 
 
 def interpretation(
@@ -216,7 +236,12 @@ def render_live_dashboard(
                 freshness="WAITING",
                 age_seconds=None,
                 figure_json=None,
-                fetch_error=fetch_error,
+                fetch_error=fetch_error
+                or (
+                    f"Manual reading acknowledgment failed: {manual_ack_error}"
+                    if manual_ack_error
+                    else None
+                ),
             )
             return
         st.error(
@@ -228,6 +253,14 @@ def render_live_dashboard(
         return
 
     latest = history[-1]
+    manual_ack_error = None
+    if not st.session_state.get("telemetry_fetch_error"):
+        manual_ack_error = acknowledge_manual_reading(
+            username,
+            key,
+            st.secrets.get("AIO_ACK_FEED_KEY", "tank-manual-ack"),
+            latest,
+        )
     now = datetime.now(timezone.utc)
     age_seconds = max(0, int((now - latest["received_at"]).total_seconds()))
     connected = not fetch_error and age_seconds < STALE_AFTER_SECONDS
@@ -235,9 +268,28 @@ def render_live_dashboard(
         st.warning(
             f"Feed request failed; showing the last received reading. {fetch_error}"
         )
+    if manual_ack_error:
+        st.warning(f"Could not acknowledge the manual reading: {manual_ack_error}")
 
     alarm = derive_theft_alarm(history)
     status, explanation = interpretation(latest, history, alarm)
+    manual_request_id = latest.get("manual_request_id", 0)
+    if manual_request_id and manual_ack_error:
+        explanation += (
+            " The dashboard could not acknowledge this manual reading; Wokwi will "
+            "keep waiting. Check the acknowledgment feed and credentials."
+        )
+    elif (
+        manual_request_id
+        and st.session_state.get("last_acknowledged_manual_id")
+        == manual_request_id
+    ):
+        explanation += (
+            " The dashboard received this manually entered reading and sent its "
+            "acknowledgment; Wokwi will request the next number."
+        )
+    elif manual_request_id:
+        explanation += " The dashboard is waiting to acknowledge this manual reading."
     if resizable_layout:
         cutoff = now - timedelta(minutes=5)
         visible_history = [
@@ -253,7 +305,12 @@ def render_live_dashboard(
             freshness="LIVE" if connected else "STALE",
             age_seconds=age_seconds,
             figure_json=chart_html or None,
-            fetch_error=fetch_error,
+            fetch_error=fetch_error
+            or (
+                f"Manual reading acknowledgment failed: {manual_ack_error}"
+                if manual_ack_error
+                else None
+            ),
         )
         return
 
@@ -377,7 +434,8 @@ try:
 except (KeyError, FileNotFoundError):
     st.error(
         "Adafruit IO is not configured. Add AIO_USERNAME, AIO_KEY, and "
-        "AIO_FEED_KEY in Streamlit Community Cloud → App settings → Secrets."
+        "AIO_FEED_KEY in Streamlit Community Cloud → App settings → Secrets. "
+        "AIO_ACK_FEED_KEY is optional and defaults to tank-manual-ack."
     )
     st.stop()
 

@@ -49,6 +49,14 @@ def parse_telemetry_record(record: Any) -> dict[str, Any]:
             raise ValueError(f"Telemetry field '{field}' is out of range.")
         payload[field] = float(field_value)
 
+    manual_request_id = payload.get("manual_request_id", 0)
+    if (
+        isinstance(manual_request_id, bool)
+        or not isinstance(manual_request_id, int)
+        or not 0 <= manual_request_id <= 4_294_967_295
+    ):
+        raise ValueError("Telemetry field 'manual_request_id' is out of range.")
+
     for field in ("generator_on", "pump_on", "theft_alarm"):
         if not isinstance(payload.get(field), bool):
             raise ValueError(f"Telemetry field '{field}' must be boolean.")
@@ -67,6 +75,36 @@ def parse_telemetry_record(record: Any) -> dict[str, Any]:
         received_at = received_at.replace(tzinfo=timezone.utc)
     payload["received_at"] = received_at.astimezone(timezone.utc)
     return payload
+
+
+def post_manual_acknowledgment(
+    username: str,
+    key: str,
+    feed: str,
+    request_id: int,
+) -> None:
+    if not username or not key or not feed:
+        raise ValueError(
+            "Adafruit IO username, key, and acknowledgment feed are required."
+        )
+    if (
+        isinstance(request_id, bool)
+        or not isinstance(request_id, int)
+        or not 1 <= request_id <= 4_294_967_295
+    ):
+        raise ValueError("Manual reading acknowledgment ID is invalid.")
+
+    url = (
+        f"https://io.adafruit.com/api/v2/{quote(username, safe='')}"
+        f"/feeds/{quote(feed, safe='')}/data"
+    )
+    response = requests.post(
+        url,
+        headers={"X-AIO-Key": key},
+        json={"value": str(request_id)},
+        timeout=8,
+    )
+    response.raise_for_status()
 
 
 def parse_telemetry_history(records: Any) -> list[dict[str, Any]]:

@@ -6,6 +6,7 @@ from adafruit_client import (
     fetch_telemetry_history,
     parse_telemetry_history,
     parse_telemetry_record,
+    post_manual_acknowledgment,
 )
 
 
@@ -49,6 +50,14 @@ class AdafruitClientTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must be boolean"):
             parse_telemetry_record(telemetry_record(generator_on=1))
 
+    def test_parse_record_preserves_manual_request_id(self):
+        reading = parse_telemetry_record(telemetry_record(manual_request_id=12345))
+        self.assertEqual(reading["manual_request_id"], 12345)
+
+    def test_parse_record_rejects_invalid_manual_request_id(self):
+        with self.assertRaisesRegex(ValueError, "manual_request_id"):
+            parse_telemetry_record(telemetry_record(manual_request_id=-1))
+
     def test_history_is_sorted_oldest_first(self):
         older = telemetry_record(timestamp=1793009000)
         newer = telemetry_record(timestamp=1793010000)
@@ -73,6 +82,20 @@ class AdafruitClientTests(unittest.TestCase):
         self.assertEqual(kwargs["headers"], {"X-AIO-Key": "private-key"})
         self.assertEqual(kwargs["params"], {"limit": 120})
         self.assertEqual(len(readings), 1)
+
+    @patch("adafruit_client.requests.post")
+    def test_posts_manual_acknowledgment_to_ack_feed(self, post):
+        post_manual_acknowledgment(
+            "tank-user", "private-key", "tank-manual-ack", 12345
+        )
+
+        post.assert_called_once_with(
+            "https://io.adafruit.com/api/v2/tank-user/feeds/tank-manual-ack/data",
+            headers={"X-AIO-Key": "private-key"},
+            json={"value": "12345"},
+            timeout=8,
+        )
+        post.return_value.raise_for_status.assert_called_once_with()
 
 
 if __name__ == "__main__":

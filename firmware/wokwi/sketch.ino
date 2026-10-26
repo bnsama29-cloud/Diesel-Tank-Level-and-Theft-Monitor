@@ -2,9 +2,16 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <ctype.h>
+#include <esp_system.h>
+#include <stdlib.h>
 #include <string.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+
+#ifndef AIO_ACK_FEED_KEY
+#define AIO_ACK_FEED_KEY "tank-manual-ack"
+#endif
 
 // =====================================================
 // 1. ESP32-S2-MINI-1 PIN CONFIGURATION
@@ -49,12 +56,22 @@ unsigned long lastCloudPublish = 0;
 float physicalDistanceCm = -1.0f;
 bool physicalSensorOK = false;
 bool physicalGeneratorOn = false;
+bool manualDistanceMode = false;
+float manualDistanceCm = 0.0f;
+bool manualUpdatePending = false;
+bool manualAwaitingDashboardAck = false;
+uint32_t manualRequestId = 0;
+unsigned long lastManualAckPoll = 0;
+char serialInput[32];
+size_t serialInputLength = 0;
+bool serialInputOverflow = false;
 
 // =====================================================
 // 5. TIMING AND CLOUD SETTINGS
 // =====================================================
 const unsigned long LCD_INTERVAL_MS = 500UL;
 const unsigned long CLOUD_PUBLISH_MS = 3000UL;
+const unsigned long MANUAL_ACK_POLL_MS = 3000UL;
 const bool ENABLE_CLOUD = true;
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
@@ -84,11 +101,79 @@ float readDistanceCm() {
   return duration * 0.0343f / 2.0f;
 }
 
+void processSerialCommand(char* command) {
+  while (isspace((unsigned char)*command)) command++;
+  char* end = command + strlen(command);
+  while (end > command && isspace((unsigned char)end[-1])) *--end = '\0';
+  if (*command == '\0') return;
+
+  for (char* cursor = command; *cursor; cursor++) {
+    *cursor = (char)toupper((unsigned char)*cursor);
+  }
+  if (strcmp(command, "AUTO") == 0) {
+    manualDistanceMode = false;
+    manualUpdatePending = false;
+    manualAwaitingDashboardAck = false;
+    Serial.println("Ultrasonic sensor mode selected.");
+    return;
+  }
+  if (manualUpdatePending || manualAwaitingDashboardAck) {
+    Serial.println("Waiting for dashboard acknowledgment. Enter AUTO to cancel.");
+    return;
+  }
+
+  char* parsedEnd = nullptr;
+  const float requestedDistance = strtof(command, &parsedEnd);
+  while (parsedEnd && isspace((unsigned char)*parsedEnd)) parsedEnd++;
+  if (parsedEnd == command || !parsedEnd || *parsedEnd != '\0' ||
+      !(requestedDistance >= 0.0f &&
+        requestedDistance <= EMPTY_DISTANCE_CM)) {
+    Serial.println("Invalid input. Enter a distance from 0 to 105, or AUTO.");
+    return;
+  }
+
+  manualDistanceCm = requestedDistance;
+  manualDistanceMode = true;
+  manualRequestId = esp_random();
+  if (manualRequestId == 0) manualRequestId = 1;
+  manualUpdatePending = true;
+  Serial.printf("Manual distance %.1f cm queued as reading %lu.\n",
+                manualDistanceCm, (unsigned long)manualRequestId);
+}
+
+void readSerialCommands() {
+  while (Serial.available() > 0) {
+    const char value = (char)Serial.read();
+    if (value == '\r') continue;
+    if (value == '\n') {
+      if (serialInputOverflow) {
+        Serial.println("Input too long. Enter 0-105 or AUTO.");
+      } else {
+        serialInput[serialInputLength] = '\0';
+        processSerialCommand(serialInput);
+      }
+      serialInputLength = 0;
+      serialInputOverflow = false;
+    } else if (!serialInputOverflow) {
+      if (serialInputLength < sizeof(serialInput) - 1) {
+        serialInput[serialInputLength++] = value;
+      } else {
+        serialInputOverflow = true;
+      }
+    }
+  }
+}
+
 void updatePhysicalInputs() {
-  const float measuredDistance = readDistanceCm();
-  physicalSensorOK = measuredDistance >= 2.0f && measuredDistance <= 400.0f;
-  if (physicalSensorOK) physicalDistanceCm = measuredDistance;
   physicalGeneratorOn = digitalRead(GENERATOR_SWITCH_PIN) == HIGH;
+  if (manualDistanceMode) {
+    physicalDistanceCm = manualDistanceCm;
+    physicalSensorOK = true;
+  } else {
+    const float measuredDistance = readDistanceCm();
+    physicalSensorOK = measuredDistance >= 2.0f && measuredDistance <= 400.0f;
+    if (physicalSensorOK) physicalDistanceCm = measuredDistance;
+  }
 }
 
 void updateTankLevel() {
@@ -240,6 +325,8 @@ void connectWiFi() {
 
 void publishTelemetry() {
   if (!ENABLE_CLOUD || WiFi.status() != WL_CONNECTED || !sensorOK) return;
+  if (manualDistanceMode &&
+      (!manualUpdatePending || manualAwaitingDashboardAck)) return;
   const unsigned long now = millis();
   if (now - lastCloudPublish < CLOUD_PUBLISH_MS) return;
   lastCloudPublish = now;
@@ -257,12 +344,13 @@ void publishTelemetry() {
            "{\"timestamp\":%lu,\"distance_cm\":%.2f,"
            "\"level_percent\":%.2f,\"litres\":%.2f,"
            "\"generator_on\":%s,\"pump_on\":%s,\"theft_alarm\":%s,"
-           "\"hours_left\":%.2f}",
+           "\"hours_left\":%.2f,\"manual_request_id\":%lu}",
            (unsigned long)currentTime, distanceCm, levelPct, litres,
            generatorOn ? "true" : "false",
            pumpOn ? "true" : "false",
            localTheftAlarm ? "true" : "false",
-           hoursLeft);
+           hoursLeft,
+           manualDistanceMode ? (unsigned long)manualRequestId : 0UL);
 
   char body[512];
   size_t bodyLength = 0;
@@ -310,6 +398,53 @@ void publishTelemetry() {
   Serial.printf("Adafruit IO telemetry: HTTP %d\n", status);
   if (status < 200 || status >= 300) {
     Serial.println(https.getString());
+  } else if (manualDistanceMode && manualUpdatePending) {
+    manualUpdatePending = false;
+    manualAwaitingDashboardAck = true;
+    lastManualAckPoll = 0;
+    Serial.println("Reading sent; waiting for dashboard acknowledgment.");
+  }
+  https.end();
+}
+
+void checkManualDashboardAck() {
+  if (!manualAwaitingDashboardAck || WiFi.status() != WL_CONNECTED) return;
+  const unsigned long now = millis();
+  if (now - lastManualAckPoll < MANUAL_ACK_POLL_MS) return;
+  lastManualAckPoll = now;
+
+  WiFiClientSecure networkClient;
+  networkClient.setCACert(AIO_ROOT_CA);
+  HTTPClient https;
+  const String url = String("https://") + AIO_HOST + "/api/v2/" +
+                     AIO_USERNAME + "/feeds/" + AIO_ACK_FEED_KEY +
+                     "/data/last";
+  https.setTimeout(5000);
+  if (!https.begin(networkClient, url)) {
+    Serial.println("Could not initialize dashboard acknowledgment check.");
+    return;
+  }
+  https.addHeader("X-AIO-Key", AIO_KEY);
+  const int status = https.GET();
+  if (status == HTTP_CODE_OK) {
+    const String response = https.getString();
+    const int valueStart = response.indexOf("\"value\":\"");
+    if (valueStart >= 0) {
+      const int start = valueStart + 9;
+      const int end = response.indexOf('"', start);
+      if (end > start &&
+          strtoul(response.substring(start, end).c_str(), nullptr, 10) ==
+              manualRequestId) {
+        manualAwaitingDashboardAck = false;
+        Serial.printf(
+            "Dashboard acknowledged reading %lu. Enter the next distance "
+            "(0-105 cm), or AUTO for the sensor.\n",
+            (unsigned long)manualRequestId);
+      }
+    }
+  } else {
+    Serial.printf("Dashboard acknowledgment check: HTTP %d\n", status);
+    if (status < 0) Serial.println(https.errorToString(status));
   }
   https.end();
 }
@@ -339,9 +474,13 @@ void setup() {
   }
   lcd.clear();
   Serial.println("Diesel tank monitor started.");
+  Serial.println(
+      "Enter distance 0-105 cm; dashboard acknowledgment is required before "
+      "the next number. Enter AUTO to use HC-SR04.");
 }
 
 void loop() {
+  readSerialCommands();
   updatePhysicalInputs();
   updateTankLevel();
   updatePump();
@@ -358,5 +497,6 @@ void loop() {
   updateLCD();
   updateBuzzer();
   publishTelemetry();
+  checkManualDashboardAck();
   delay(50);
 }
