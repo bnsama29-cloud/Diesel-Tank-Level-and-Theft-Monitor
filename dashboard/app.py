@@ -274,6 +274,11 @@ def render_live_dashboard(
 
     alarm = derive_theft_alarm(history)
     status, explanation = interpretation(latest, history, alarm)
+    if any(reading.get("litres_recovered", False) for reading in history):
+        explanation += (
+            " Older feed points used the previous tank capacity; litres are "
+            "recalculated from their percentages for the current 100 L tank."
+        )
     manual_request_id = latest.get("manual_request_id", 0)
     if manual_request_id and manual_ack_error:
         explanation += (

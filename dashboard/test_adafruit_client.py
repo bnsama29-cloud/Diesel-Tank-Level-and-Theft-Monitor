@@ -54,6 +54,16 @@ class AdafruitClientTests(unittest.TestCase):
         reading = parse_telemetry_record(telemetry_record(manual_request_id=12345))
         self.assertEqual(reading["manual_request_id"], 12345)
 
+    def test_parse_record_recalculates_litres_for_old_capacity_records(self):
+        reading = parse_telemetry_record(telemetry_record(litres=250))
+        self.assertEqual(reading["litres"], 50.0)
+        self.assertTrue(reading["litres_recovered"])
+
+    def test_parse_record_preserves_litres_when_consistent_with_current_capacity(self):
+        reading = parse_telemetry_record(telemetry_record(litres=50))
+        self.assertEqual(reading["litres"], 50.0)
+        self.assertFalse(reading["litres_recovered"])
+
     def test_parse_record_rejects_invalid_manual_request_id(self):
         with self.assertRaisesRegex(ValueError, "manual_request_id"):
             parse_telemetry_record(telemetry_record(manual_request_id=-1))

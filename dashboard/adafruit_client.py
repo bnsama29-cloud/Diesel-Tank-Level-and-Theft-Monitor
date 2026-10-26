@@ -38,7 +38,6 @@ def parse_telemetry_record(record: Any) -> dict[str, Any]:
     fields = {
         "distance_cm": (2.0, 400.0),
         "level_percent": (0.0, 100.0),
-        "litres": (0.0, TANK_CAPACITY_LITRES),
         "hours_left": (-1.0, math.inf),
     }
     for field, (minimum, maximum) in fields.items():
@@ -48,6 +47,20 @@ def parse_telemetry_record(record: Any) -> dict[str, Any]:
         if not math.isfinite(field_value) or not minimum <= field_value <= maximum:
             raise ValueError(f"Telemetry field '{field}' is out of range.")
         payload[field] = float(field_value)
+
+    raw_litres = payload.get("litres")
+    if (
+        isinstance(raw_litres, bool)
+        or not isinstance(raw_litres, (int, float))
+        or not math.isfinite(raw_litres)
+        or raw_litres < 0
+    ):
+        raise ValueError("Telemetry field 'litres' is out of range.")
+    expected_litres = payload["level_percent"] / 100.0 * TANK_CAPACITY_LITRES
+    payload["litres_recovered"] = not math.isclose(
+        raw_litres, expected_litres, rel_tol=0.0, abs_tol=0.1
+    )
+    payload["litres"] = expected_litres
 
     manual_request_id = payload.get("manual_request_id", 0)
     if (
