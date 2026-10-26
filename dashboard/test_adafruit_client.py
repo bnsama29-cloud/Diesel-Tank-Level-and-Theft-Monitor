@@ -1,9 +1,12 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import requests
+
 from adafruit_client import (
     decode_remote_command,
     encode_remote_command,
+    fetch_latest_command,
     publish_command,
 )
 
@@ -38,6 +41,19 @@ class RemoteCommandTests(unittest.TestCase):
             json={"value": "12242"},
             timeout=10,
         )
+
+    @patch("adafruit_client.fetch_latest_feed")
+    def test_empty_command_feed_is_treated_as_no_active_override(self, fetch):
+        response = Mock(status_code=404)
+        fetch.side_effect = requests.HTTPError(response=response)
+        self.assertIsNone(fetch_latest_command("tank-user", "private-key"))
+
+    @patch("adafruit_client.fetch_latest_feed")
+    def test_non_404_command_errors_are_not_suppressed(self, fetch):
+        response = Mock(status_code=401)
+        fetch.side_effect = requests.HTTPError(response=response)
+        with self.assertRaises(requests.HTTPError):
+            fetch_latest_command("tank-user", "private-key")
 
 
 if __name__ == "__main__":

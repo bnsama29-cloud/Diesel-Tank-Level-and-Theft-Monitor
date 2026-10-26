@@ -12,6 +12,7 @@ from streamlit_autorefresh import st_autorefresh
 from adafruit_client import (
     decode_remote_command,
     encode_remote_command,
+    fetch_latest_command,
     fetch_latest_feed,
     fetch_level_history,
     publish_command,
@@ -126,9 +127,7 @@ command_reading = None
 command_error = None
 if not mobile_view:
     try:
-        command_reading = fetch_latest_feed(username, aio_key, "command")
-    except requests.HTTPError as exc:
-        command_error = exc
+        command_reading = fetch_latest_command(username, aio_key)
     except (requests.RequestException, ValueError) as exc:
         command_error = exc
 
@@ -177,6 +176,12 @@ if not mobile_view:
         else:
             mode_label = "Dashboard virtual inputs" if remote_command else "Wokwi controls"
             st.info(f"Current input source: **{mode_label}**")
+            if command_reading is None:
+                st.info(
+                    "No command value is stored yet. Wokwi inputs remain active until "
+                    "you apply a dashboard input. If applying it returns 404, check "
+                    "that the Adafruit `command` feed exists."
+                )
             if "control_distance" not in st.session_state:
                 initial_distance = (
                     remote_command[0] if remote_command else values["distance"]

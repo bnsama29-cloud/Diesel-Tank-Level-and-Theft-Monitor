@@ -50,6 +50,15 @@ def fetch_latest_feed(username: str, key: str, feed: str) -> tuple[float, dateti
     return value, timestamp
 
 
+def fetch_latest_command(username: str, key: str) -> tuple[float, datetime] | None:
+    try:
+        return fetch_latest_feed(username, key, "command")
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return None
+        raise
+
+
 def fetch_level_history(username: str, key: str, limit: int = 500):
     from adafruit_history import parse_level_history
 
