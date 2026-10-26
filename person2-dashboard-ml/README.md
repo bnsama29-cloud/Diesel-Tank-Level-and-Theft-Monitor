@@ -1,10 +1,10 @@
 # Person 2 — Dashboard and anomaly analysis
 
-The Streamlit app reads the latest values from the seven Adafruit IO feeds, shows the current level/pump/generator/alarm state, and embeds the procedural 3D tank viewer. It also applies the required transparent rapid-drop rule to readings observed by the dashboard.
+The Streamlit app reads the latest values from the seven Adafruit IO feeds, plots level history with the 20%/90% pump thresholds, shows current operating status, and embeds the procedural 3D tank viewer. It also applies the required transparent rapid-drop rule to readings observed by the dashboard.
 
 ## Run/deploy in the browser
 
-1. Deploy this folder from GitHub using Streamlit Community Cloud.
+1. In Streamlit Community Cloud, deploy this repository and select `person2-dashboard-ml/app.py` as the app file.
 2. In the app's **Settings → Secrets**, add:
 
    ```toml
@@ -13,6 +13,9 @@ The Streamlit app reads the latest values from the seven Adafruit IO feeds, show
    ```
 
 3. Confirm that the seven feed keys match [`../integration/README.md`](../integration/README.md).
+
+The history graph uses up to the most recent 500 values from the Adafruit `level` feed and refreshes every 20 seconds. Keep the Wokwi simulation running while viewing it so new samples arrive.
+The repository-root `requirements.txt` includes the packages required by both the full demo dashboard and this Adafruit-connected dashboard.
 
 Do not add a `.streamlit/secrets.toml` file or a real key to GitHub. Local launch is optional and requires Python, so it is not part of the no-install workflow.
 

@@ -57,3 +57,15 @@ The dashboard combines the latest feed values into a common record:
 6. Test generator ON with gradual decline; verify the hours-left value is available only when a usable trend exists.
 
 The current dashboard uses an explainable threshold rule, not a trained ML classifier. Person 2 should only add a learned model after collecting representative normal-use and theft-labeled observations.
+
+## View graphs in Adafruit IO
+
+Adafruit IO can show graphs without deploying the Python dashboard:
+
+1. Open **Dashboards** and create a dashboard, or open the existing one.
+2. Add a **Line Chart** block and select the `level` feed. Choose a time range and title it “Tank level (%)”.
+3. Add another **Line Chart** block for `litres` if you want the volume history too.
+4. Add **Gauge** blocks for `level` (0–100) and `litres` (0–500), plus **Indicator** blocks for `pump`, `generator`, and `theft`.
+5. Save the dashboard and keep the Wokwi simulation running to produce graph data.
+
+For a custom, more polished dashboard outside Adafruit IO, deploy `person2-dashboard-ml/app.py` to Streamlit Community Cloud and add the Adafruit username/key under that app's private **Settings → Secrets**. This dashboard adds a level-history Plotly graph and the synchronized tank visualization.
