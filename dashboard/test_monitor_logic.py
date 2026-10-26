@@ -5,10 +5,10 @@ from monitor_logic import detect_rapid_drop, level_from_distance, pump_should_ru
 
 class TankLogicTests(unittest.TestCase):
     def test_distance_conversion_and_clamping(self):
-        self.assertEqual(level_from_distance(5), (100.0, 500.0))
-        self.assertEqual(level_from_distance(55), (50.0, 250.0))
+        self.assertEqual(level_from_distance(5), (100.0, 100.0))
+        self.assertEqual(level_from_distance(55), (50.0, 50.0))
         self.assertEqual(level_from_distance(105), (0.0, 0.0))
-        self.assertEqual(level_from_distance(0), (100.0, 500.0))
+        self.assertEqual(level_from_distance(0), (100.0, 100.0))
         self.assertEqual(level_from_distance(120), (0.0, 0.0))
 
     def test_pump_hysteresis_boundaries(self):

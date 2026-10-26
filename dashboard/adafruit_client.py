@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 
-TANK_CAPACITY_LITRES = 500.0
+TANK_CAPACITY_LITRES = 100.0
 HISTORY_LIMIT = 120
 
 

@@ -61,7 +61,7 @@
         <div class="title">DIESEL CHAMBER · LIVE</div>
         <div class="level" id="level-label">__LEVEL_PERCENT__%</div>
       </div>
-      <div class="capacity" id="litres-label">__LITRES__ / 500 L</div>
+      <div class="capacity" id="litres-label">__LITRES__ / __TANK_CAPACITY_LITRES__ L</div>
     </div>
     <div class="hint">Drag to rotate · Pinch or scroll to zoom</div>
   </main>
@@ -72,9 +72,10 @@
   <script type="module">
     const host = document.getElementById("tank-view");
     const levelPercent = Math.max(0, Math.min(100, Number("__LEVEL_PERCENT__")));
-    const litres = Math.max(0, Math.min(500, Number("__LITRES__")));
+    const capacity = Number("__TANK_CAPACITY_LITRES__");
+    const litres = Math.max(0, Math.min(capacity, Number("__LITRES__")));
     document.getElementById("level-label").textContent = `${levelPercent.toFixed(1)}%`;
-    document.getElementById("litres-label").textContent = `${litres.toFixed(1)} / 500 L`;
+    document.getElementById("litres-label").textContent = `${litres.toFixed(1)} / ${capacity.toFixed(0)} L`;
 
     try {
       const THREE = await import("https://cdn.jsdelivr.net/npm/three@0.177.0/build/three.module.js");

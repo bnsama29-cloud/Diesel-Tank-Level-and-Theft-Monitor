@@ -152,7 +152,7 @@ with st.sidebar:
 
     st.subheader("Tank Dimensions")
     depth = st.number_input("Depth (cm)", 10, 500, 100, key="cfg_depth")
-    capacity = st.number_input("Capacity (L)", 10, 10000, 500, key="cfg_cap")
+    capacity = st.number_input("Capacity (L)", 10, 10000, 100, key="cfg_cap")
     if depth != tank.config.depth_cm or capacity != tank.config.capacity_litres:
         new_cfg = TankConfig(depth_cm=depth, capacity_litres=capacity)
         st.session_state.tank_config = new_cfg

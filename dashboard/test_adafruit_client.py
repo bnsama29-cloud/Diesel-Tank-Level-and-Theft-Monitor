@@ -14,7 +14,7 @@ def telemetry_record(**overrides):
         "timestamp": 1793010000,
         "distance_cm": 55,
         "level_percent": 50,
-        "litres": 250,
+        "litres": 50,
         "generator_on": False,
         "pump_on": False,
         "theft_alarm": False,

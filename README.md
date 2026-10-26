@@ -4,7 +4,7 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 
 ## What it does
 
-- Converts sensor distance to level and volume for a 500 L tank (5 cm full, 105 cm empty).
+- Converts sensor distance to level and volume for a 100 L tank (5 cm full, 105 cm empty).
 - Shows level and volume on an I2C LCD and indicates LOW / MEDIUM / FULL with LEDs.
 - Turns the refill pump ON at or below 20%; once on, it stays on until the level rises above 90%.
 - Detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
@@ -34,7 +34,7 @@ requirements.txt            Python dependencies
 4. Configure the same Adafruit IO username, key, feed key, and trusted root CA certificate in a private Wokwi `secrets.h`.
 5. Copy the current `firmware/wokwi/sketch.ino` and corrected `firmware/wokwi/diagram.json` into the hosted Wokwi project, then start the simulation.
 
-The firmware writes one complete telemetry record every 3 seconds, and the dashboard reads the feed every 3 seconds. Expect a few seconds of end-to-end delay depending on network and hosting conditions. The dashboard chart uses recent feed history and does not depend on a 3D model.
+The firmware writes one complete telemetry record every 3 seconds, and the dashboard reads the feed every 3 seconds. The simulated tank capacity is 100 L: 5 cm is full, 105 cm is empty, and 55 cm is about 50 L. Expect a few seconds of end-to-end delay depending on network and hosting conditions. The dashboard chart uses recent feed history and does not depend on a 3D model.
 
 Full setup and troubleshooting instructions are in [`docs/integration.md`](docs/integration.md). Never commit Adafruit IO keys or expose them in a public Wokwi project.
 

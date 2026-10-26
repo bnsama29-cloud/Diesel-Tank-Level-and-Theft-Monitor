@@ -2,7 +2,7 @@ import base64
 from pathlib import Path
 
 
-TANK_CAPACITY_LITRES = 500.0
+TANK_CAPACITY_LITRES = 100.0
 
 
 def build_tank_html(
@@ -22,5 +22,6 @@ def build_tank_html(
     return (
         template.replace("__LEVEL_PERCENT__", f"{safe_level:.1f}")
         .replace("__LITRES__", f"{safe_litres:.1f}")
+        .replace("__TANK_CAPACITY_LITRES__", f"{TANK_CAPACITY_LITRES:.0f}")
         .replace("__TANK_MODEL_BASE64__", model_data)
     )

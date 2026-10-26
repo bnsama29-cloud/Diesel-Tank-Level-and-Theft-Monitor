@@ -11,7 +11,7 @@ Typical usage::
 
     from tank_model import TankConfig, TankModel
 
-    model = TankModel(TankConfig(depth_cm=120, capacity_litres=600))
+    model = TankModel(TankConfig(depth_cm=100, capacity_litres=100))
     state = model.process_reading(distance_cm=30.0, generator_on=True)
     print(state)
 """
@@ -45,7 +45,7 @@ class TankConfig:
     """
 
     depth_cm: float = 100.0
-    capacity_litres: float = 500.0
+    capacity_litres: float = 100.0
     low_pct: float = 20.0          # pump ON threshold
     high_pct: float = 90.0         # pump OFF threshold
     theft_drop_pct: float = 5.0    # legacy theft-detection drop (for reference)

@@ -29,7 +29,7 @@ class ResizableDashboardTests(unittest.TestCase):
     @patch("resizable_dashboard._dashboard_component")
     def test_component_receives_latest_values_and_graph_with_stable_key(self, component):
         latest = {
-            "litres": 250.0,
+            "litres": 50.0,
             "level_percent": 50.0,
             "generator_on": True,
             "pump_on": False,

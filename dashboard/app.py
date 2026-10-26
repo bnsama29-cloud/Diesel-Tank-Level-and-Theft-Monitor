@@ -367,7 +367,7 @@ st.title("⛽ Diesel Tank Monitor")
 mobile_view = st.query_params.get("view", "desktop") == "mobile"
 st.caption(
     f"{'Read-only live monitor' if mobile_view else 'Wokwi simulation · Live monitor'}"
-    " · 500 L tank · Theft rule: >5 percentage points in 60 seconds while generator OFF"
+    " · 100 L tank · Theft rule: >5 percentage points in 60 seconds while generator OFF"
 )
 
 try:

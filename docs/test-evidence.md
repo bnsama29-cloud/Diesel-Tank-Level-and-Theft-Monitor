@@ -4,11 +4,11 @@ Save Wokwi, Adafruit IO, and dashboard screenshots under `docs/evidence/`. Do no
 
 | Test | Setup | Expected result | Actual |
 | --- | --- | --- | --- |
-| Full tank | Distance 5 cm | 100%, 500 L, pump OFF, FULL LED | LCD showed 100%, 500 L: [Wokwi screenshot](./evidence/01-full-tank-wokwi.png). |
-| Low tank | Distance 95 cm | 10%, 50 L, pump ON, LOW LED | LCD showed 9%, 46 L: [Wokwi screenshot](./evidence/02-distance-95cm-observed.png). |
+| Full tank | Distance 5 cm | 100%, 100 L, pump OFF, FULL LED | Existing screenshot shows the previous 500 L calibration; recapture after updating Wokwi firmware. |
+| Low tank | Distance 95 cm | 10%, 10 L, pump ON, LOW LED | Existing screenshot shows the previous 500 L calibration; recapture after updating Wokwi firmware. |
 | Hysteresis hold | Start low, raise to 50% | Pump stays ON | Pending |
 | Hysteresis stop | Raise above 90% | Pump turns OFF | Pending |
-| Medium level | Distance 55 cm | 50%, 250 L, MEDIUM LED | LCD showed 50%, 248 L: [Wokwi screenshot](./evidence/03-distance-55cm-observed.png). |
+| Medium level | Distance 55 cm | 50%, 50 L, MEDIUM LED | Existing screenshot shows the previous 500 L calibration; recapture after updating Wokwi firmware. |
 | Generator ON | Switch ON, stable/gradual level | Generator ON, no theft alarm | Pending: the corrected local wiring below still needs to be reloaded into the hosted Wokwi project and verified. |
 | Theft alarm | Generator OFF, >5 point drop in 60 seconds | `THEFT?`, buzzer, `theft_alarm: true` in the JSON feed | Pending |
 | Empty tank | Distance at/above 105 cm | 0%, 0 L, pump ON | Pending |

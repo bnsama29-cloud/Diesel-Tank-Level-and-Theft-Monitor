@@ -10,11 +10,11 @@ class TankViewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             template_path = Path(folder) / "tank.html"
             template_path.write_text(
-                '<div>__LEVEL_PERCENT__</div><div>__LITRES__</div>',
+                '<div>__LEVEL_PERCENT__</div><div>__LITRES__ / __TANK_CAPACITY_LITRES__ L</div>',
                 encoding="utf-8",
             )
-            html = build_tank_html(template_path, 42.5, 212.5)
-        self.assertEqual(html, "<div>42.5</div><div>212.5</div>")
+            html = build_tank_html(template_path, 42.5, 50)
+        self.assertEqual(html, "<div>42.5</div><div>50.0 / 100 L</div>")
 
     def test_clamps_values_to_physical_tank_range(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -29,7 +29,7 @@ class TankViewTests(unittest.TestCase):
             model_path = Path(folder) / "tank.gltf"
             template_path.write_text("__TANK_MODEL_BASE64__", encoding="utf-8")
             model_path.write_bytes(b'{"asset":{"version":"2.0"}}')
-            html = build_tank_html(template_path, 50, 250, model_path)
+            html = build_tank_html(template_path, 50, 50, model_path)
         self.assertEqual(
             html,
             "eyJhc3NldCI6eyJ2ZXJzaW9uIjoiMi4wIn19",

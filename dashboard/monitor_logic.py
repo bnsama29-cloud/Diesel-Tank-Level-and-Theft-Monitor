@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 def level_from_distance(
     distance_cm: float,
-    capacity_litres: float = 500.0,
+    capacity_litres: float = 100.0,
     full_distance_cm: float = 5.0,
     empty_distance_cm: float = 105.0,
 ) -> tuple[float, float]:

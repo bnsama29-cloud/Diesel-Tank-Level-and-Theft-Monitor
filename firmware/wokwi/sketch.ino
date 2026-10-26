@@ -24,7 +24,7 @@ const int LCD_SCL = 20;
 // 2. TANK CONFIGURATION
 // HC-SR04 distance: 5 cm = full, 105 cm = empty
 // =====================================================
-const float TANK_CAPACITY_L = 500.0f;
+const float TANK_CAPACITY_L = 100.0f;
 const float FULL_DISTANCE_CM = 5.0f;
 const float EMPTY_DISTANCE_CM = 105.0f;
 const float PUMP_ON_LEVEL = 20.0f;

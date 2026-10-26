@@ -20,8 +20,8 @@ class TelemetryDisplayTests(unittest.TestCase):
         self.assertIsNone(level_from_sensor_distance(401))
 
     def test_invalid_litres_are_recovered_from_display_level(self):
-        self.assertEqual(display_litres(10000, 60), (300.0, True))
-        self.assertEqual(display_litres(250, 60), (250.0, False))
+        self.assertEqual(display_litres(10000, 60), (60.0, True))
+        self.assertEqual(display_litres(50, 50), (50.0, False))
         self.assertEqual(display_litres(-1, None), (None, True))
 
 
