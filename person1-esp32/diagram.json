@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "author": "Diesel Tank Monitor team",
+  "author": "Samarth BN",
   "editor": "wokwi",
   "parts": [
     { "type": "wokwi-breadboard-half", "id": "bb1", "top": 141, "left": 194.8, "attrs": {} },

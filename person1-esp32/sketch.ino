@@ -5,6 +5,9 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+// =====================================================
+// 1. ESP32-S2-MINI-1 PIN CONFIGURATION
+// =====================================================
 const int TRIG_PIN = 5;
 const int ECHO_PIN = 6;
 const int LED_LOW = 7;
@@ -16,6 +19,10 @@ const int GENERATOR_SWITCH_PIN = 12;
 const int LCD_SDA = 21;
 const int LCD_SCL = 20;
 
+// =====================================================
+// 2. TANK CONFIGURATION
+// HC-SR04 distance: 5 cm = full, 105 cm = empty
+// =====================================================
 const float TANK_CAPACITY_L = 500.0f;
 const float FULL_DISTANCE_CM = 5.0f;
 const float EMPTY_DISTANCE_CM = 105.0f;
@@ -24,29 +31,37 @@ const float PUMP_OFF_LEVEL = 90.0f;
 const float THEFT_DROP_PERCENT = 5.0f;
 const bool RELAY_ACTIVE_LOW = false;
 
+bool generatorOn = false;
+bool localTheftAlarm = false;
 const unsigned long SAMPLE_INTERVAL_MS = 1000UL;
 const unsigned long THEFT_WINDOW_MS = 60000UL;
-const unsigned long LCD_INTERVAL_MS = 500UL;
-const unsigned long CLOUD_PUBLISH_MS = 20000UL;
 const int HISTORY_SIZE = 61;
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
-float levelHistory[HISTORY_SIZE] = {};
-unsigned long timeHistory[HISTORY_SIZE] = {};
+float levelHistory[HISTORY_SIZE] = {0};
+unsigned long timeHistory[HISTORY_SIZE] = {0};
 int historyWriteIndex = 0;
 int historyCount = 0;
 unsigned long lastSampleTime = 0;
 unsigned long lastLcdTime = 0;
 unsigned long lastCloudPublish = 0;
-unsigned long lastStatusLog = 0;
 
-float distanceCm = 0.0f;
+// =====================================================
+// 5. TIMING AND CLOUD SETTINGS
+// Seven feeds every 20 seconds = 21 data points/minute.
+// =====================================================
+const unsigned long LCD_INTERVAL_MS = 500UL;
+const unsigned long CLOUD_PUBLISH_MS = 20000UL;
+const bool ENABLE_CLOUD = true;
+const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_PASSWORD = "";
+const char* AIO_HOST = "io.adafruit.com";
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+float distanceCm = -1.0f;
 float levelPct = 0.0f;
 float litres = 0.0f;
 bool sensorOK = false;
 bool pumpOn = false;
-bool generatorOn = false;
-bool theftAlarm = false;
 
 int relayLevel(bool on) {
   if (RELAY_ACTIVE_LOW) return on ? LOW : HIGH;
@@ -67,6 +82,7 @@ float readDistanceCm() {
 
 void updateTankLevel() {
   const float measuredDistance = readDistanceCm();
+  // Distances beyond the calibrated empty point represent an empty tank.
   if (measuredDistance < 2.0f || measuredDistance > 400.0f) {
     sensorOK = false;
     return;
@@ -83,17 +99,17 @@ void updateTankLevel() {
 
 void updatePump() {
   if (!sensorOK) {
-    pumpOn = false;
-  } else if (levelPct <= PUMP_ON_LEVEL) {
-    pumpOn = true;
-  } else if (levelPct > PUMP_OFF_LEVEL) {
-    pumpOn = false;
+    pumpOn = false; // fail-safe: stop pump if sensor data is invalid
+  } else {
+    if (levelPct <= PUMP_ON_LEVEL) pumpOn = true;
+    else if (levelPct > PUMP_OFF_LEVEL) pumpOn = false;
+    // Between 20% and 90%, retain previous pump state.
   }
   digitalWrite(RELAY_PIN, relayLevel(pumpOn));
 }
 
-void updateIndicators() {
-  const bool low = sensorOK && levelPct <= 20.0f;
+void updateLEDs() {
+  const bool low = sensorOK && levelPct < 20.0f;
   const bool full = sensorOK && levelPct > 90.0f;
   const bool medium = sensorOK && !low && !full;
   digitalWrite(LED_LOW, low ? HIGH : LOW);
@@ -101,31 +117,25 @@ void updateIndicators() {
   digitalWrite(LED_FULL, full ? HIGH : LOW);
 }
 
-void logLocalStatus() {
-  const unsigned long now = millis();
-  if (now - lastStatusLog < 1000UL) return;
-  lastStatusLog = now;
-  Serial.printf(
-      "Sensor:%s Distance:%.1f cm Level:%.1f%% Fuel:%.1f L "
-      "LED low/med/full:%d/%d/%d Generator:%s Pump:%s Theft:%s\n",
-      sensorOK ? "OK" : "ERROR", distanceCm, levelPct, litres,
-      digitalRead(LED_LOW), digitalRead(LED_MEDIUM), digitalRead(LED_FULL),
-      generatorOn ? "ON" : "OFF", pumpOn ? "ON" : "OFF",
-      theftAlarm ? "YES" : "NO");
+void updateGeneratorState() {
+  generatorOn = (digitalRead(GENERATOR_SWITCH_PIN) == HIGH);
 }
 
 int oldestSampleAtLeast(unsigned long minimumAge, unsigned long now,
                         unsigned long* sampleAge) {
-  for (int offset = 0; offset < historyCount; offset++) {
-    const int index = (historyWriteIndex + HISTORY_SIZE - historyCount + offset)
-                      % HISTORY_SIZE;
-    const unsigned long age = now - timeHistory[index];
+  int found = -1;
+  unsigned long greatestAge = 0;
+  for (int i = 0; i < historyCount; i++) {
+    const unsigned long age = now - timeHistory[i];
     if (age >= minimumAge) {
-      if (sampleAge) *sampleAge = age;
-      return index;
+      if (age > greatestAge) {
+        greatestAge = age;
+        found = i;
+      }
     }
   }
-  return -1;
+  if (sampleAge) *sampleAge = greatestAge;
+  return found;
 }
 
 void recordLevel() {
@@ -138,7 +148,7 @@ void recordLevel() {
   if (historyCount < HISTORY_SIZE) historyCount++;
 }
 
-bool rapidDropDetected() {
+bool detectRapidDrop() {
   if (generatorOn || !sensorOK) return false;
   unsigned long age = 0;
   const int baselineIndex = oldestSampleAtLeast(THEFT_WINDOW_MS, millis(), &age);
@@ -159,7 +169,7 @@ float estimateHoursLeft() {
   return levelPct / percentPerHour;
 }
 
-void updateDisplay() {
+void updateLCD() {
   const unsigned long now = millis();
   if (now - lastLcdTime < LCD_INTERVAL_MS) return;
   lastLcdTime = now;
@@ -167,7 +177,7 @@ void updateDisplay() {
   if (!sensorOK) {
     lcd.setCursor(0, 0); lcd.print("Sensor error    ");
     lcd.setCursor(0, 1); lcd.print("Check HC-SR04   ");
-  } else if (theftAlarm) {
+  } else if (localTheftAlarm) {
     lcd.setCursor(0, 0); lcd.print("THEFT?          ");
     char line[17];
     snprintf(line, sizeof(line), "%.0f%% %.0f L", levelPct, litres);
@@ -182,10 +192,15 @@ void updateDisplay() {
   }
 }
 
+void updateBuzzer() {
+  digitalWrite(BUZZER_PIN, localTheftAlarm ? HIGH : LOW);
+}
+
 void connectWiFi() {
+  if (!ENABLE_CLOUD) return;
   WiFi.mode(WIFI_STA);
-  WiFi.begin("Wokwi-GUEST", "");
-  Serial.print("Connecting to Wokwi-GUEST");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wokwi Wi-Fi");
   const unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 15000UL) {
     delay(300);
@@ -201,7 +216,7 @@ bool publishFeedValue(const char* feedKey, const String& value) {
   WiFiClientSecure client;
   client.setCACert(AIO_ROOT_CA);
   HTTPClient https;
-  const String url = String("https://io.adafruit.com/api/v2/") +
+  const String url = String("https://") + AIO_HOST + "/api/v2/" +
                      AIO_USERNAME + "/feeds/" + feedKey + "/data";
   https.setTimeout(5000);
   if (!https.begin(client, url)) {
@@ -220,7 +235,7 @@ bool publishFeedValue(const char* feedKey, const String& value) {
 }
 
 void publishTelemetry() {
-  if (WiFi.status() != WL_CONNECTED || !sensorOK) return;
+  if (!ENABLE_CLOUD || WiFi.status() != WL_CONNECTED || !sensorOK) return;
   const unsigned long now = millis();
   if (now - lastCloudPublish < CLOUD_PUBLISH_MS) return;
   lastCloudPublish = now;
@@ -231,7 +246,7 @@ void publishTelemetry() {
   allOK &= publishFeedValue("litres", String(litres, 2));
   allOK &= publishFeedValue("generator", String(generatorOn ? 1 : 0));
   allOK &= publishFeedValue("pump", String(pumpOn ? 1 : 0));
-  allOK &= publishFeedValue("theft", String(theftAlarm ? 1 : 0));
+  allOK &= publishFeedValue("theft", String(localTheftAlarm ? 1 : 0));
   allOK &= publishFeedValue("hours-left", String(estimateHoursLeft(), 2));
   Serial.println(allOK ? "Adafruit IO publish cycle succeeded."
                        : "Adafruit IO publish cycle had errors.");
@@ -246,23 +261,12 @@ void setup() {
   pinMode(LED_FULL, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(GENERATOR_SWITCH_PIN, INPUT);
+  pinMode(GENERATOR_SWITCH_PIN, INPUT); // switch wired to 3V3 or GND
   digitalWrite(TRIG_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
   digitalWrite(RELAY_PIN, relayLevel(false));
 
   Wire.begin(LCD_SDA, LCD_SCL);
-  Wire.setClock(100000);
-  bool lcdFound = false;
-  for (uint8_t address = 1; address < 127; address++) {
-    Wire.beginTransmission(address);
-    if (Wire.endTransmission() == 0) {
-      Serial.printf("I2C device found at 0x%02X\n", address);
-      if (address == 0x27) lcdFound = true;
-    }
-  }
-  Serial.println(lcdFound ? "LCD at 0x27 detected."
-                          : "LCD at 0x27 NOT detected; check SDA/SCL/VCC/GND.");
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0); lcd.print("Tank Monitor");
@@ -274,19 +278,20 @@ void setup() {
 
 void loop() {
   updateTankLevel();
-  generatorOn = digitalRead(GENERATOR_SWITCH_PIN) == HIGH;
+  updateGeneratorState();
   updatePump();
-  updateIndicators();
+  updateLEDs();
   recordLevel();
 
-  if (!theftAlarm && rapidDropDetected()) {
-    theftAlarm = true;
-    Serial.println("THEFT ALERT: rapid drop while generator is OFF.");
+  if (detectRapidDrop()) {
+    if (!localTheftAlarm) {
+      Serial.println("THEFT ALERT: rapid level drop while generator OFF.");
+    }
+    localTheftAlarm = true;
   }
 
-  digitalWrite(BUZZER_PIN, theftAlarm ? HIGH : LOW);
-  updateDisplay();
-  logLocalStatus();
+  updateLCD();
+  updateBuzzer();
   publishTelemetry();
   delay(50);
 }
