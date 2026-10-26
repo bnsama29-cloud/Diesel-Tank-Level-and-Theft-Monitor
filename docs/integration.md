@@ -1,6 +1,6 @@
 # Shared integration contract
 
-Use the existing Adafruit IO account as the bridge between Wokwi and the dashboard. The ESP32 sends HTTPS updates; the dashboard reads the latest value from each feed. A local WebSocket/MQTT gateway is not needed for this browser-only setup.
+Adafruit IO is the background data relay between Wokwi and the hosted dashboard. The user-facing demo is Wokwi plus the Streamlit website; viewers do not need to open the Adafruit IO dashboard. Wokwi sends HTTPS updates, and the website reads feed history and current values. A local WebSocket/MQTT gateway is not needed for this browser-only setup.
 
 ## Feeds
 
@@ -68,4 +68,4 @@ Adafruit IO can show graphs without deploying the Python dashboard:
 4. Add **Gauge** blocks for `level` (0–100) and `litres` (0–500), plus **Indicator** blocks for `pump`, `generator`, and `theft`.
 5. Save the dashboard and keep the Wokwi simulation running to produce graph data.
 
-For a custom, more polished dashboard outside Adafruit IO, deploy `dashboard/app.py` to Streamlit Community Cloud and add the Adafruit username/key under that app's private **Settings → Secrets**. This dashboard adds a level-history Plotly graph and the synchronized tank visualization.
+For the custom mobile monitoring website, deploy `dashboard/app.py` to Streamlit Community Cloud and add the Adafruit username/key under that app's private **Settings → Secrets**. This dashboard adds a level-history Plotly graph, system status, and an interactive WebGL tank that follows the reported level.

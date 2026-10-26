@@ -10,6 +10,7 @@ from streamlit_autorefresh import st_autorefresh
 
 from adafruit_history import parse_level_history
 from monitor_logic import detect_rapid_drop
+from tank_view import build_tank_html
 
 
 FEEDS = {
@@ -61,11 +62,9 @@ def fetch_latest_feed(username: str, key: str, feed: str) -> tuple[float, dateti
     return value, timestamp
 
 
-def render_tank(level: float) -> None:
+def render_tank(level: float, litres: float) -> None:
     template_path = Path(__file__).parent / "assets" / "tank_viewer.html"
-    template = template_path.read_text(encoding="utf-8")
-    safe_level = max(0.0, min(100.0, level))
-    html = template.replace("__LEVEL_PERCENT__", f"{safe_level:.1f}")
+    html = build_tank_html(template_path, level, litres)
     components.html(html, height=390, scrolling=False)
 
 
@@ -92,13 +91,20 @@ st.markdown(
       div[data-testid="stMetricValue"] { color: #f2f8fc; }
       .hero-note { color: #91a8bc; margin-top: -.5rem; }
       [data-testid="stAlert"] { border-radius: 14px; }
+      @media (max-width: 700px) {
+        .block-container { padding: 1rem .8rem 2rem; }
+        h1 { font-size: 1.65rem !important; }
+        h2 { font-size: 1.25rem !important; }
+        div[data-testid="stMetric"] { padding: 12px; }
+        div[data-testid="stMetricValue"] { font-size: 1.35rem; }
+      }
     </style>
     """,
     unsafe_allow_html=True,
 )
 st.title("⛽ Diesel Tank Monitor")
 st.markdown(
-    '<div class="hero-note">Live tank telemetry · Adafruit IO · 500 L capacity</div>',
+    '<div class="hero-note">Live simulation monitor · 500 L diesel chamber</div>',
     unsafe_allow_html=True,
 )
 st_autorefresh(interval=POLL_INTERVAL_MS, key="feed-refresh")
@@ -159,12 +165,11 @@ dashboard_alarm = (
 alarm = firmware_alarm or dashboard_alarm
 
 st.subheader("Live status")
-first, second, third, fourth, fifth = st.columns(5)
+first, second, third, fourth = st.columns(4)
 first.metric("Tank level", f"{level:.1f}%", level_status)
 second.metric("Fuel volume", f"{litres:.1f} L", f"of {TANK_CAPACITY_LITRES:.0f} L")
 third.metric("Generator", "RUNNING" if generator_on else "STOPPED")
 fourth.metric("Refill pump", "ON" if pump_on else "OFF")
-fifth.metric("Distance", f"{values['distance']:.1f} cm")
 
 if alarm:
     st.error("🚨 THEFT ALERT · Rapid unexplained tank-level drop detected.")
@@ -173,8 +178,8 @@ else:
 
 left, right = st.columns([1, 1.35], gap="large")
 with left:
-    st.subheader("Tank visualization")
-    render_tank(level)
+    st.subheader("Interactive 3D diesel chamber")
+    render_tank(level, litres)
 with right:
     st.subheader("Fuel level history")
     if len(level_history) > 1:
@@ -244,7 +249,7 @@ with right:
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             st.caption(
-                f"Showing {len(visible_history)} of {len(level_history)} stored Adafruit level readings."
+                f"Showing {len(visible_history)} of {len(level_history)} stored tank readings."
             )
         else:
             st.info("Not enough readings yet for this time range. Leave the simulator running to collect more.")
@@ -255,6 +260,7 @@ st.divider()
 left, right = st.columns(2)
 with left:
     st.subheader("Operating state")
+    st.write(f"**Sensor distance:** {values['distance']:.1f} cm")
     st.write(f"**Generator:** {'🟢 ON' if generator_on else '⚪ OFF'}")
     st.write(f"**Pump relay:** {'🟢 ON' if pump_on else '⚪ OFF'}")
     st.write(f"**Alarm:** {'🔴 THEFT?' if alarm else '🟢 Clear'}")

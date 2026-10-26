@@ -5,114 +5,255 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; background: #0e1726; color: #e5edf8; }
-    main { height: 370px; display: grid; place-items: center; }
-    canvas { width: 100%; height: 100%; max-width: 560px; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(ellipse at 50% 42%, #17334a 0, #0b1220 72%);
+      color: #e5edf8;
+    }
+    main {
+      position: relative;
+      height: 390px;
+      width: 100%;
+      overflow: hidden;
+      border: 1px solid rgba(140, 190, 220, .12);
+      border-radius: 18px;
+      touch-action: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    .overlay {
+      position: absolute;
+      inset: 16px 18px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      text-shadow: 0 2px 12px #06101c;
+    }
+    .title { font-size: 12px; color: #a6bacb; letter-spacing: .14em; }
+    .level { font-size: 24px; font-weight: 700; color: #f1f8fc; }
+    .capacity { margin-top: 4px; color: #91a9bc; font-size: 12px; text-align: right; }
+    .hint {
+      position: absolute;
+      bottom: 12px;
+      width: 100%;
+      text-align: center;
+      color: #8da5b8;
+      font-size: 11px;
+      pointer-events: none;
+    }
+    .fallback {
+      padding: 32px 18px;
+      color: #c5d5e2;
+      text-align: center;
+    }
+    @media (max-width: 520px) {
+      main { height: 310px; border-radius: 14px; }
+      .overlay { inset: 12px 12px auto; }
+      .level { font-size: 20px; }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <canvas id="tank" aria-label="3D tank visualization"></canvas>
+  <main id="tank-view">
+    <div class="overlay">
+      <div>
+        <div class="title">DIESEL CHAMBER · LIVE</div>
+        <div class="level" id="level-label">__LEVEL_PERCENT__%</div>
+      </div>
+      <div class="capacity" id="litres-label">__LITRES__ / 500 L</div>
+    </div>
+    <div class="hint">Drag to rotate · Pinch or scroll to zoom</div>
   </main>
-  <script>
-    (() => {
-      const canvas = document.getElementById("tank");
-      const ctx = canvas.getContext("2d");
-      const level = Math.max(0, Math.min(100, Number("__LEVEL_PERCENT__")));
+  <script type="module">
+    const host = document.getElementById("tank-view");
+    const levelPercent = Math.max(0, Math.min(100, Number("__LEVEL_PERCENT__")));
+    const litres = Math.max(0, Math.min(500, Number("__LITRES__")));
+    document.getElementById("level-label").textContent = `${levelPercent.toFixed(1)}%`;
+    document.getElementById("litres-label").textContent = `${litres.toFixed(1)} / 500 L`;
 
-      function polygon(points, fill, stroke, lineWidth = 1) {
-        ctx.beginPath();
-        ctx.moveTo(points[0][0], points[0][1]);
-        for (const point of points.slice(1)) ctx.lineTo(point[0], point[1]);
-        ctx.closePath();
-        ctx.fillStyle = fill;
-        ctx.fill();
-        if (stroke) {
-          ctx.strokeStyle = stroke;
-          ctx.lineWidth = lineWidth;
-          ctx.stroke();
-        }
+    try {
+      const THREE = await import("https://cdn.jsdelivr.net/npm/three@0.177.0/build/three.module.js");
+      renderTank(THREE);
+    } catch (error) {
+      host.innerHTML = '<div class="fallback">The interactive 3D viewer needs an internet connection to load its renderer.</div>';
+      console.error("Could not load the 3D tank renderer.", error);
+    }
+
+    function renderTank(THREE) {
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color("#0b1220");
+      scene.fog = new THREE.Fog("#0b1220", 8, 18);
+
+      const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+      camera.position.set(4.5, 3.1, 6.7);
+      camera.lookAt(0, 0.1, 0);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      host.prepend(renderer.domElement);
+
+      scene.add(new THREE.HemisphereLight("#ccecff", "#101a27", 2.1));
+      const keyLight = new THREE.DirectionalLight("#c5f7ff", 3.3);
+      keyLight.position.set(4, 7, 5);
+      scene.add(keyLight);
+      const rimLight = new THREE.PointLight("#29c4df", 24, 10);
+      rimLight.position.set(-3, 1.5, -2);
+      scene.add(rimLight);
+
+      const tankGroup = new THREE.Group();
+      scene.add(tankGroup);
+
+      const tankHeight = 3.7;
+      const tankRadius = 1.02;
+      const tankBottom = -tankHeight / 2;
+      const liquidHeight = tankHeight * levelPercent / 100;
+
+      const floor = new THREE.Mesh(
+        new THREE.CircleGeometry(4, 64),
+        new THREE.MeshStandardMaterial({ color: "#12283a", roughness: 0.78 })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = tankBottom - 0.18;
+      scene.add(floor);
+
+      const shell = new THREE.Mesh(
+        new THREE.CylinderGeometry(tankRadius, tankRadius, tankHeight, 64, 1, true),
+        new THREE.MeshPhysicalMaterial({
+          color: "#9ec2d4",
+          metalness: 0.28,
+          roughness: 0.2,
+          transmission: 0.68,
+          transparent: true,
+          opacity: 0.24,
+          side: THREE.DoubleSide
+        })
+      );
+      shell.position.y = 0;
+      tankGroup.add(shell);
+
+      const rimMaterial = new THREE.MeshStandardMaterial({
+        color: "#91a9ba", metalness: 0.78, roughness: 0.28
+      });
+      for (const y of [tankBottom + 0.12, 0, -tankBottom - 0.12]) {
+        const band = new THREE.Mesh(
+          new THREE.TorusGeometry(tankRadius + 0.012, 0.035, 10, 64),
+          rimMaterial
+        );
+        band.rotation.x = Math.PI / 2;
+        band.position.y = y;
+        tankGroup.add(band);
       }
 
-      function draw() {
-        const ratio = window.devicePixelRatio || 1;
-        const bounds = canvas.getBoundingClientRect();
-        canvas.width = Math.round(bounds.width * ratio);
-        canvas.height = Math.round(bounds.height * ratio);
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.clearRect(0, 0, bounds.width, bounds.height);
+      const top = new THREE.Mesh(
+        new THREE.CylinderGeometry(tankRadius, tankRadius, 0.07, 64),
+        new THREE.MeshStandardMaterial({ color: "#43596a", metalness: 0.65, roughness: 0.35 })
+      );
+      top.position.y = tankHeight / 2;
+      tankGroup.add(top);
 
-        const scale = Math.min(bounds.width / 370, bounds.height / 300);
-        ctx.save();
-        ctx.translate((bounds.width - 300 * scale) / 2, 22 * scale);
-        ctx.scale(scale, scale);
-
-        const x = 70;
-        const top = 45;
-        const width = 150;
-        const height = 205;
-        const depthX = 48;
-        const depthY = -29;
-        const bottom = top + height;
-        const liquidY = bottom - height * level / 100;
-        const outline = "#a8bdd4";
-
-        polygon(
-          [[x, top], [x + depthX, top + depthY], [x + width + depthX, top + depthY],
-           [x + width, top]],
-          "#344c66", outline, 2
+      const feetMaterial = new THREE.MeshStandardMaterial({
+        color: "#718797", metalness: 0.72, roughness: 0.32
+      });
+      for (let i = 0; i < 4; i++) {
+        const angle = Math.PI / 4 + i * Math.PI / 2;
+        const foot = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.055, 0.075, 0.42, 12),
+          feetMaterial
         );
-        polygon(
-          [[x + width, top], [x + width + depthX, top + depthY],
-           [x + width + depthX, bottom + depthY], [x + width, bottom]],
-          "#1b3046", outline, 2
-        );
-        polygon(
-          [[x, liquidY], [x + width, liquidY], [x + width, bottom], [x, bottom]],
-          level > 0 ? "#0879b7" : "#17283a"
-        );
-        if (level > 0) {
-          polygon(
-            [[x + width, liquidY], [x + width + depthX, liquidY + depthY],
-             [x + width + depthX, bottom + depthY], [x + width, bottom]],
-            "#075d91"
-          );
-          polygon(
-            [[x, liquidY], [x + depthX, liquidY + depthY],
-             [x + width + depthX, liquidY + depthY], [x + width, liquidY]],
-            "#45d8e8"
-          );
-        }
-        polygon(
-          [[x, top], [x + width, top], [x + width, bottom], [x, bottom]],
-          "rgba(22, 44, 65, 0.15)", outline, 3
-        );
-
-        ctx.strokeStyle = "rgba(205, 224, 243, .42)";
-        ctx.lineWidth = 1;
-        for (let tick = 1; tick < 10; tick++) {
-          const y = top + height * tick / 10;
-          ctx.beginPath();
-          ctx.moveTo(x + width - 12, y);
-          ctx.lineTo(x + width, y);
-          ctx.stroke();
-        }
-
-        ctx.fillStyle = "#e5edf8";
-        ctx.textAlign = "center";
-        ctx.font = "600 20px system-ui, sans-serif";
-        ctx.fillText(`${level.toFixed(1)}%`, x + width / 2, bottom - 14);
-        ctx.font = "600 14px system-ui, sans-serif";
-        ctx.fillText("500 L DIESEL TANK", 170, 290);
-        ctx.fillStyle = "#9fb3c9";
-        ctx.font = "12px system-ui, sans-serif";
-        ctx.fillText(`${(level * 5).toFixed(1)} L`, 170, 310);
-        ctx.restore();
+        foot.position.set(Math.cos(angle) * 0.7, tankBottom - 0.2, Math.sin(angle) * 0.7);
+        tankGroup.add(foot);
       }
 
-      draw();
-      new ResizeObserver(draw).observe(canvas);
-    })();
+      if (liquidHeight > 0.005) {
+        const diesel = new THREE.Mesh(
+          new THREE.CylinderGeometry(
+            tankRadius * 0.965,
+            tankRadius * 0.965,
+            liquidHeight,
+            64
+          ),
+          new THREE.MeshPhysicalMaterial({
+            color: "#13a5bb",
+            metalness: 0.16,
+            roughness: 0.2,
+            transmission: 0.18,
+            transparent: true,
+            opacity: 0.92,
+            clearcoat: 0.8,
+            clearcoatRoughness: 0.14
+          })
+        );
+        diesel.position.y = tankBottom + liquidHeight / 2;
+        tankGroup.add(diesel);
+
+        const surface = new THREE.Mesh(
+          new THREE.CircleGeometry(tankRadius * 0.96, 64),
+          new THREE.MeshPhysicalMaterial({
+            color: "#55e6ed",
+            metalness: 0.08,
+            roughness: 0.18,
+            transparent: true,
+            opacity: 0.75
+          })
+        );
+        surface.rotation.x = -Math.PI / 2;
+        surface.position.y = tankBottom + liquidHeight + 0.008;
+        tankGroup.add(surface);
+      }
+
+      const grid = new THREE.GridHelper(8, 24, "#294558", "#192f40");
+      grid.position.y = tankBottom - 0.17;
+      scene.add(grid);
+
+      let dragging = false;
+      let previousX = 0;
+      let previousY = 0;
+      let rotationY = -0.55;
+      let rotationX = 0.12;
+      let zoom = 1;
+      host.addEventListener("pointerdown", event => {
+        dragging = true;
+        previousX = event.clientX;
+        previousY = event.clientY;
+        host.setPointerCapture(event.pointerId);
+      });
+      host.addEventListener("pointermove", event => {
+        if (!dragging) return;
+        rotationY += (event.clientX - previousX) * 0.009;
+        rotationX = Math.max(-0.3, Math.min(0.55, rotationX + (event.clientY - previousY) * 0.004));
+        previousX = event.clientX;
+        previousY = event.clientY;
+      });
+      host.addEventListener("pointerup", () => { dragging = false; });
+      host.addEventListener("pointercancel", () => { dragging = false; });
+      host.addEventListener("wheel", event => {
+        event.preventDefault();
+        zoom = Math.max(0.78, Math.min(1.45, zoom + event.deltaY * 0.001));
+      }, { passive: false });
+
+      function resize() {
+        const width = Math.max(host.clientWidth, 1);
+        const height = Math.max(host.clientHeight, 1);
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      }
+      new ResizeObserver(resize).observe(host);
+      resize();
+
+      function render() {
+        tankGroup.rotation.set(rotationX, rotationY, 0);
+        camera.position.set(4.5 * zoom, 3.1 * zoom, 6.7 * zoom);
+        camera.lookAt(0, 0.05, 0);
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      }
+      render();
+    }
   </script>
 </body>
 </html>
