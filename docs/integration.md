@@ -14,16 +14,18 @@ Adafruit IO is no longer part of the live path. The dashboard subscribes to the 
 
 The firmware publishes every 2 seconds and the Streamlit fragment redraws every 2 seconds. Typical display latency should be a few seconds, depending on Wokwi, broker, network, and browser scheduling. The dashboard marks telemetry stale after 8 seconds. MQTT messages are retained so a dashboard that connects after the simulator can receive its latest state. The dashboard keeps up to 3,600 readings in process memory; this chart history resets if the Streamlit app restarts and is not a permanent database.
 
-## Create a free broker
+## Create a temporary HiveMQ Cloud broker
 
-This configuration targets a HiveMQ Cloud serverless cluster:
+New HiveMQ Cloud Serverless clusters are no longer available. HiveMQ's current Starter option offers a 15-day free trial, not a permanent free tier. Its official guide says the trial requires no credit card; when the trial ends, the cluster is removed automatically unless you add a payment method and continue on a paid plan. Check the current plan and billing terms in HiveMQ before starting. Do not add a payment method if you do not want paid service.
 
-1. Create a free HiveMQ Cloud account and a serverless cluster.
-2. Copy the cluster hostname (hostname only, without `mqtts://`), TLS MQTT port `8883`, and create a username/password in the cluster's access management.
+This is suitable for a short project demonstration. For a longer-running deployment, choose a broker plan that remains within your budget or another managed broker with a currently available free tier.
+
+1. Create a HiveMQ Cloud account and start a Starter trial cluster.
+2. Copy the cluster hostname (hostname only, without `mqtts://`), its secure MQTT port, and create a username/password in the cluster's access management.
 3. Permit that username to publish and subscribe to `diesel-tank/telemetry` (or configure another single topic consistently on both ends).
 4. Obtain the broker's trusted root CA PEM from its TLS/certificate documentation. Do not disable certificate verification.
 
-The free broker tier is subject to the provider's current usage and connection limits; check its current plan before a long demonstration.
+Use the secure MQTT port shown in your cluster details in both the dashboard and Wokwi. The sample configuration below uses `8883`.
 
 ## Configure the dashboard
 
