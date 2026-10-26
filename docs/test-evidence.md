@@ -1,6 +1,6 @@
 # Demonstration evidence checklist
 
-Save Wokwi, MQTT broker, dashboard, and tank-viewer screenshots under `docs/evidence/`. Do not include broker credentials or personal Wi-Fi details in screenshots.
+Save Wokwi, Adafruit IO, and dashboard screenshots under `docs/evidence/`. Do not include AIO keys or personal Wi-Fi details in screenshots.
 
 | Test | Setup | Expected result | Actual |
 | --- | --- | --- | --- |
@@ -10,12 +10,12 @@ Save Wokwi, MQTT broker, dashboard, and tank-viewer screenshots under `docs/evid
 | Hysteresis stop | Raise above 90% | Pump turns OFF | Pending |
 | Medium level | Distance 55 cm | 50%, 250 L, MEDIUM LED | LCD showed 50%, 248 L: [Wokwi screenshot](./evidence/03-distance-55cm-observed.png). |
 | Generator ON | Switch ON, stable/gradual level | Generator ON, no theft alarm | Pending: the corrected local wiring below still needs to be reloaded into the hosted Wokwi project and verified. |
-| Theft alarm | Generator OFF, >5 point drop in 60 seconds | `THEFT?`, buzzer, alarm feed ON | Pending |
+| Theft alarm | Generator OFF, >5 point drop in 60 seconds | `THEFT?`, buzzer, `theft_alarm: true` in the JSON feed | Pending |
 | Empty tank | Distance at/above 105 cm | 0%, 0 L, pump ON | Pending |
-| Cloud integration | Wokwi publishes MQTT telemetry to the configured cloud broker | Dashboard receives messages within a few seconds | Pending: previous HTTP 200 screenshots were from the retired Adafruit path and do not verify the current MQTT setup. |
-| Dashboard + tank | Open deployed dashboard | Readings and tank fill follow feeds | Pending |
+| Cloud integration | Wokwi posts one JSON point to the `tank-telemetry` Adafruit IO feed every 3 seconds | Dashboard receives the new feed record and marks it live | Pending: the current single-feed route still needs live verification. |
+| Dashboard readings + graph | Open deployed dashboard and vary the Wokwi distance slider | Values and graph follow the latest JSON feed; stale status appears when publishing stops | Pending |
 
-Suggested filenames for the remaining live captures: `04-pump-hysteresis-wokwi.png`, `05-generator-on-wokwi.png`, `06-theft-alarm-wokwi.png`, `07-empty-tank-wokwi.png`, `08-adafruit-feeds.png`, and `09-dashboard-tank.png`.
+Suggested filenames for the remaining live captures: `04-pump-hysteresis-wokwi.png`, `05-generator-on-wokwi.png`, `06-theft-alarm-wokwi.png`, `07-empty-tank-wokwi.png`, `08-adafruit-json-feed.png`, and `09-dashboard-live-graph.png`.
 
 ## Generator switch wiring note
 

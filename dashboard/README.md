@@ -1,18 +1,18 @@
 # Web dashboards
 
-## Live MQTT monitor
+## Live Adafruit IO monitor
 
-Deploy `app.py` to Streamlit Community Cloud and add the MQTT secrets listed in [`../docs/integration.md`](../docs/integration.md). The ESP32 publishes a retained telemetry snapshot to the cloud broker every 2 seconds; this app subscribes to that topic and redraws the live section every 2 seconds. No Adafruit IO account or feed setup is required.
+Deploy `app.py` to Streamlit Community Cloud and add the Adafruit IO secrets listed in [`../docs/integration.md`](../docs/integration.md). The ESP32 publishes one JSON telemetry value to the `tank-telemetry` feed every 3 seconds; the dashboard reads recent feed data at the same interval.
 
-The desktop page embeds Wokwi and displays tank status, live activity, level history, and the interactive WebGL tank. Add `?view=mobile` for the same read-only monitor without the simulator. Recent chart samples are held in memory and are lost if the app restarts.
+The responsive dashboard prioritizes current fuel, generator and pump state, calculated runtime, feed freshness, rule-based interpretation, and a fuel-level graph. Refill and firmware theft events are marked on the graph when present. The 3D tank viewer is deferred and is not a dependency of the live monitor.
 
-The public Wokwi project is separate from Git. Copy the updated sketch, corrected diagram, and private broker settings into Wokwi; pushes do not update the hosted simulation.
+On desktop the page embeds Wokwi beside the monitor. Add `?view=mobile` for the read-only monitor and a link to open Wokwi separately. The Wokwi project is separate from Git; copy the updated sketch, corrected diagram, and private Adafruit settings into Wokwi.
 
-The 3D view embeds the team's Onshape `diesel-tank.gltf` export. Three.js renders a rotatable chamber whose liquid surface follows the latest telemetry.
+The dashboard uses the explicit rule “more than 5 percentage points in 60 seconds while generator OFF” for suspected theft. The offline simulator's ML model is separate and is not a validated real-world classifier.
 
 ## Offline simulator and ML demonstration
 
-`simulator_app.py` is an offline demo with manual controls, scenario playback, charts, and an ML anomaly detector. It needs no MQTT connection:
+`simulator_app.py` is an offline demo with manual controls, scenario playback, charts, and an ML anomaly detector. It needs no Adafruit IO connection:
 
 ```text
 streamlit run dashboard/simulator_app.py

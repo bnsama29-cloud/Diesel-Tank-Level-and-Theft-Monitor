@@ -1,7 +1,8 @@
 #include "secrets.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <PubSubClient.h>
+#include <HTTPClient.h>
+#include <string.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -39,6 +40,7 @@ const int HISTORY_SIZE = 61;
 
 float levelHistory[HISTORY_SIZE] = {0};
 unsigned long timeHistory[HISTORY_SIZE] = {0};
+bool generatorHistory[HISTORY_SIZE] = {false};
 int historyWriteIndex = 0;
 int historyCount = 0;
 unsigned long lastSampleTime = 0;
@@ -52,20 +54,18 @@ bool physicalGeneratorOn = false;
 // 5. TIMING AND CLOUD SETTINGS
 // =====================================================
 const unsigned long LCD_INTERVAL_MS = 500UL;
-const unsigned long CLOUD_PUBLISH_MS = 2000UL;
+const unsigned long CLOUD_PUBLISH_MS = 3000UL;
 const bool ENABLE_CLOUD = true;
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
+const char* AIO_HOST = "io.adafruit.com";
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-WiFiClientSecure mqttNetworkClient;
-PubSubClient mqttClient(mqttNetworkClient);
 float distanceCm = -1.0f;
 float levelPct = 0.0f;
 float litres = 0.0f;
 bool sensorOK = false;
 bool pumpOn = false;
-unsigned long lastMqttReconnect = 0;
 
 int relayLevel(bool on) {
   if (RELAY_ACTIVE_LOW) return on ? LOW : HIGH;
@@ -126,10 +126,12 @@ void updateLEDs() {
 }
 
 int oldestSampleAtLeast(unsigned long minimumAge, unsigned long now,
+                        bool requiredGeneratorState,
                         unsigned long* sampleAge) {
   int found = -1;
   unsigned long greatestAge = 0;
   for (int i = 0; i < historyCount; i++) {
+    if (generatorHistory[i] != requiredGeneratorState) continue;
     const unsigned long age = now - timeHistory[i];
     if (age >= minimumAge) {
       if (age > greatestAge) {
@@ -142,12 +144,30 @@ int oldestSampleAtLeast(unsigned long minimumAge, unsigned long now,
   return found;
 }
 
+int oldestSampleWithinWindow(unsigned long maximumAge, unsigned long now,
+                             bool requiredGeneratorState,
+                             unsigned long* sampleAge) {
+  int found = -1;
+  unsigned long greatestAge = 0;
+  for (int i = 0; i < historyCount; i++) {
+    if (generatorHistory[i] != requiredGeneratorState) continue;
+    const unsigned long age = now - timeHistory[i];
+    if (age <= maximumAge && age >= greatestAge) {
+      greatestAge = age;
+      found = i;
+    }
+  }
+  if (sampleAge) *sampleAge = greatestAge;
+  return found;
+}
+
 void recordLevel() {
   const unsigned long now = millis();
   if (now - lastSampleTime < SAMPLE_INTERVAL_MS || !sensorOK) return;
   lastSampleTime = now;
   levelHistory[historyWriteIndex] = levelPct;
   timeHistory[historyWriteIndex] = now;
+  generatorHistory[historyWriteIndex] = generatorOn;
   historyWriteIndex = (historyWriteIndex + 1) % HISTORY_SIZE;
   if (historyCount < HISTORY_SIZE) historyCount++;
 }
@@ -155,7 +175,8 @@ void recordLevel() {
 bool detectRapidDrop() {
   if (generatorOn || !sensorOK) return false;
   unsigned long age = 0;
-  const int baselineIndex = oldestSampleAtLeast(THEFT_WINDOW_MS, millis(), &age);
+  const int baselineIndex = oldestSampleWithinWindow(
+      THEFT_WINDOW_MS, millis(), false, &age);
   return baselineIndex >= 0 &&
          levelHistory[baselineIndex] - levelPct > THEFT_DROP_PERCENT;
 }
@@ -163,7 +184,8 @@ bool detectRapidDrop() {
 float estimateHoursLeft() {
   if (!generatorOn || !sensorOK) return -1.0f;
   unsigned long age = 0;
-  const int baselineIndex = oldestSampleAtLeast(THEFT_WINDOW_MS, millis(), &age);
+  const int baselineIndex = oldestSampleAtLeast(
+      THEFT_WINDOW_MS, millis(), true, &age);
   if (baselineIndex < 0 || age == 0) return -1.0f;
 
   const float dropPct = levelHistory[baselineIndex] - levelPct;
@@ -216,41 +238,22 @@ void connectWiFi() {
                      : "Wi-Fi unavailable; local monitoring continues.");
 }
 
-void maintainMqttConnection() {
-  if (!ENABLE_CLOUD || WiFi.status() != WL_CONNECTED || mqttClient.connected()) return;
-
-  const unsigned long now = millis();
-  if (now - lastMqttReconnect < 5000UL) return;
-  lastMqttReconnect = now;
-
-  time_t currentTime;
-  time(&currentTime);
-  if (currentTime < 1700000000) {
-    Serial.println("Waiting for network time before MQTT TLS.");
-    return;
-  }
-
-  char clientId[32];
-  snprintf(clientId, sizeof(clientId), "diesel-%08llx",
-           (unsigned long long)ESP.getEfuseMac());
-  if (mqttClient.connect(clientId, MQTT_USERNAME, MQTT_PASSWORD)) {
-    Serial.println("MQTT broker connected.");
-  } else {
-    Serial.printf("MQTT connection failed, state=%d\n", mqttClient.state());
-  }
-}
-
 void publishTelemetry() {
-  if (!ENABLE_CLOUD || !mqttClient.connected() || !sensorOK) return;
+  if (!ENABLE_CLOUD || WiFi.status() != WL_CONNECTED || !sensorOK) return;
   const unsigned long now = millis();
   if (now - lastCloudPublish < CLOUD_PUBLISH_MS) return;
   lastCloudPublish = now;
 
-  char payload[256];
   const float hoursLeft = estimateHoursLeft();
   time_t currentTime;
   time(&currentTime);
-  snprintf(payload, sizeof(payload),
+  if (currentTime < 1700000000) {
+    Serial.println("Waiting for network time before Adafruit IO TLS.");
+    return;
+  }
+
+  char telemetry[256];
+  snprintf(telemetry, sizeof(telemetry),
            "{\"timestamp\":%lu,\"distance_cm\":%.2f,"
            "\"level_percent\":%.2f,\"litres\":%.2f,"
            "\"generator_on\":%s,\"pump_on\":%s,\"theft_alarm\":%s,"
@@ -260,9 +263,53 @@ void publishTelemetry() {
            pumpOn ? "true" : "false",
            localTheftAlarm ? "true" : "false",
            hoursLeft);
-  const bool published = mqttClient.publish(MQTT_TOPIC, payload, true);
-  Serial.println(published ? "MQTT telemetry published."
-                           : "MQTT telemetry publish failed.");
+
+  char body[512];
+  size_t bodyLength = 0;
+  const int prefixLength = snprintf(body, sizeof(body), "{\"value\":\"");
+  if (prefixLength < 0 || (size_t)prefixLength >= sizeof(body)) {
+    Serial.println("Adafruit IO telemetry payload formatting failed.");
+    return;
+  }
+  bodyLength = (size_t)prefixLength;
+  for (const char* cursor = telemetry; *cursor; cursor++) {
+    if (*cursor == '"' || *cursor == '\\') {
+      if (bodyLength + 2 >= sizeof(body)) {
+        Serial.println("Adafruit IO telemetry payload is too large.");
+        return;
+      }
+      body[bodyLength++] = '\\';
+    } else if (bodyLength + 1 >= sizeof(body)) {
+      Serial.println("Adafruit IO telemetry payload is too large.");
+      return;
+    }
+    body[bodyLength++] = *cursor;
+  }
+  const char suffix[] = "\"}";
+  if (bodyLength + sizeof(suffix) > sizeof(body)) {
+    Serial.println("Adafruit IO telemetry payload is too large.");
+    return;
+  }
+  memcpy(body + bodyLength, suffix, sizeof(suffix));
+
+  WiFiClientSecure networkClient;
+  networkClient.setCACert(AIO_ROOT_CA);
+  HTTPClient https;
+  const String url = String("https://") + AIO_HOST + "/api/v2/" +
+                     AIO_USERNAME + "/feeds/" + AIO_FEED_KEY + "/data";
+  https.setTimeout(5000);
+  if (!https.begin(networkClient, url)) {
+    Serial.println("Could not initialize Adafruit IO HTTPS request.");
+    return;
+  }
+  https.addHeader("X-AIO-Key", AIO_KEY);
+  https.addHeader("Content-Type", "application/json");
+  const int status = https.POST(String(body));
+  Serial.printf("Adafruit IO telemetry: HTTP %d\n", status);
+  if (status < 200 || status >= 300) {
+    Serial.println(https.getString());
+  }
+  https.end();
 }
 
 void setup() {
@@ -284,11 +331,6 @@ void setup() {
   lcd.backlight();
   lcd.setCursor(0, 0); lcd.print("Tank Monitor");
   lcd.setCursor(0, 1); lcd.print("Starting...");
-  mqttNetworkClient.setCACert(MQTT_ROOT_CA);
-  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
-  mqttClient.setKeepAlive(30);
-  mqttClient.setBufferSize(512);
-  mqttClient.setSocketTimeout(2);
   connectWiFi();
   if (WiFi.status() == WL_CONNECTED) {
     configTime(0, 0, "pool.ntp.org", "time.google.com");
@@ -313,8 +355,6 @@ void loop() {
 
   updateLCD();
   updateBuzzer();
-  maintainMqttConnection();
-  mqttClient.loop();
   publishTelemetry();
   delay(50);
 }
