@@ -35,7 +35,7 @@ Tank calibration: 5 cm is full, 105 cm is empty, capacity is 500 L. The HC-SR04 
 - Theft alarm latches if the generator is OFF and the measured level drops by more than 5 percentage points over at least 60 seconds.
 - Cloud publishing is rate-limited to one update cycle every 20 seconds. Seven separate feed updates produce up to 21 data points/minute.
 - Hours-left is a rough estimate based on the recent level trend; it is unavailable until the history window is filled and consumption is detected.
-- LEDs are active-high, with their cathodes connected directly to ESP32 ground. LOW is on at or below 20%, MEDIUM above 20% through 90%, and FULL only above 90%.
+- LEDs are active-high, with their cathodes returned through the breadboard ground rail as in the original Wokwi circuit. LOW is on below 20%, MEDIUM from 20% through 90%, and FULL above 90%.
 - The Serial Monitor logs the detected I2C address and local sensor/LED/pump state once per second for simulation debugging.
 
 Verify the tests in the root report-evidence checklist against the actual simulation before reporting PASS.
