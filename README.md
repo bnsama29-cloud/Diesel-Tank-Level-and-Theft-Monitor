@@ -9,7 +9,7 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 - Turns the refill pump ON at or below 20%; once on, it stays on until the level rises above 90%.
 - Reads the generator slide switch and detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
 - Publishes seven telemetry values over HTTPS from Wokwi through Adafruit IO as the cloud relay.
-- Displays live readings, history, status, and an interactive WebGL 3D chamber in a Streamlit website. No Adafruit dashboard view is required.
+- Displays live readings, history, status, and an interactive WebGL 3D chamber in a Streamlit website. The desktop view controls virtual sensor/generator inputs; a mobile URL is read-only.
 
 ## Repository layout
 
@@ -30,14 +30,15 @@ requirements.txt         Dependencies for both dashboard entry points
 
 ## See the live dashboard
 
-Deploy this repository on [Streamlit Community Cloud](https://share.streamlit.io/) and set the app file to `dashboard/app.py`. Add the following under the app's **Settings → Secrets**:
+Deploy this repository on [Streamlit Community Cloud](https://share.streamlit.io/) and set the app file to `dashboard/app.py`. The default app URL is the desktop control room; append `?view=mobile` for a read-only mobile view. Add the following under the app's **Settings → Secrets**:
 
 ```toml
 AIO_USERNAME = "your_adafruit_username"
 AIO_KEY = "your_private_adafruit_io_key"
+CONTROL_PASSWORD = "choose_a_private_dashboard_control_password"
 ```
 
-Keep the Wokwi simulation running. It publishes to Adafruit IO in the background, and the dashboard refreshes from those readings every 20 seconds. The dashboard works on mobile browsers and includes the live graph and interactive tank model.
+Create all eight feeds documented in [`docs/integration.md`](docs/integration.md), including `command`. Keep the Wokwi simulation running and upload the current [`sketch.ino`](firmware/wokwi/sketch.ino) to that Wokwi project. The simulation publishes to Adafruit IO in the background and checks for desktop controls every 10 seconds. Both views refresh telemetry every 20 seconds; each shows the live graph and 3D tank, and mobile exposes no controls. Set a private `CONTROL_PASSWORD` secret to protect the desktop command interface.
 
 ## Run the simulation dashboard
 

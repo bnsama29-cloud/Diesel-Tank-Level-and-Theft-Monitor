@@ -1,10 +1,10 @@
 # Shared integration contract
 
-Adafruit IO is the background data relay between Wokwi and the hosted dashboard. The user-facing demo is Wokwi plus the Streamlit website; viewers do not need to open the Adafruit IO dashboard. Wokwi sends HTTPS updates, and the website reads feed history and current values. A local WebSocket/MQTT gateway is not needed for this browser-only setup.
+Adafruit IO is the background data relay between Wokwi and the hosted website. The laptop Wokwi simulation publishes telemetry; the desktop website reads it and can send virtual sensor/switch inputs back to the ESP32. A mobile URL provides the same live readings, graph, and 3D tank in read-only mode. Viewers do not need to open the Adafruit IO dashboard.
 
 ## Feeds
 
-Create these seven Adafruit IO feeds with the exact lowercase keys:
+Create these eight Adafruit IO feeds with the exact lowercase keys:
 
 | Feed key | Type / example | Meaning |
 | --- | --- | --- |
@@ -15,8 +15,17 @@ Create these seven Adafruit IO feeds with the exact lowercase keys:
 | `pump` | integer, `0` or `1` | Pump relay OFF / ON |
 | `theft` | integer, `0` or `1` | Latched firmware theft alarm |
 | `hours-left` | number, `-1` or hours | `-1` means unavailable |
+| `command` | integer, `0` or encoded input | `0` returns control to Wokwi; nonzero values are dashboard virtual inputs |
 
-The firmware posts each feed once per 20-second cycle (up to 21 data points/minute). Keep that interval unless the account's current Adafruit IO rate limit has been checked.
+The firmware posts each telemetry feed once per 20-second cycle (up to 21 data points/minute) and checks the `command` feed every 10 seconds. Create the `command` feed before enabling dashboard controls.
+
+## Bidirectional simulation controls
+
+The desktop page (the app URL without a query string) has a virtual distance slider and generator toggle. **Apply dashboard inputs** writes `10000 + round(distance_cm * 10) + (2000 if generator_on else 0)` to `command`; `0` releases the override. The Wokwi firmware polls it every 10 seconds, uses the virtual inputs in the tank/pump/theft logic, and publishes the resulting telemetry. The desktop dashboard and mobile read-only page then show the updated readings, history graph, and 3D tank.
+
+If the physical HC-SR04 distance slider or generator switch is changed in Wokwi while remote inputs are active, the firmware returns control to Wokwi and clears the command. The remote inputs affect firmware behavior and reported readings; they do not move Wokwi's component graphics. **Return control to Wokwi** in the desktop page releases the virtual inputs manually.
+
+Use `?view=mobile` on the deployed website URL for the mobile read-only page. The default URL is the desktop control room.
 
 ## Data shape
 
@@ -44,17 +53,20 @@ The dashboard combines the latest feed values into a common record:
 
 - ESP32 writes require `AIO_USERNAME` and a newly generated `AIO_KEY` in a private Wokwi `secrets.h`.
 - Dashboard reads require the same username/key in Streamlit Community Cloud's app secrets as `AIO_USERNAME` and `AIO_KEY`.
+- Set a separate private `CONTROL_PASSWORD` secret to protect dashboard-to-Wokwi commands. Never share it in the repository or mobile bookmark.
 - Never put the key in this repository, screenshots, source files, or a public Wokwi project. Revoke the previously pasted key.
 - Firmware TLS certificate verification must remain enabled. Configure the current CA certificate for `io.adafruit.com` in the private `secrets.h`.
 
 ## Integration checklist
 
-1. Verify each feed appears in Adafruit IO and receives updated values.
-2. Compare Wokwi Serial Monitor HTTP status and Adafruit IO latest feed values.
+1. Create the seven telemetry feeds and the `command` feed.
+2. Compare Wokwi Serial Monitor HTTP status and Adafruit IO latest telemetry values.
 3. Deploy `dashboard/app.py` to Streamlit Community Cloud and configure its app secrets.
-4. Check that the dashboard displays all feed values and the tank fill follows `level`.
-5. Test theft with generator OFF and a drop greater than 5 percentage points within 60 seconds; compare LCD, buzzer, `theft` feed, and dashboard.
-6. Test generator ON with gradual decline; verify the hours-left value is available only when a usable trend exists.
+4. Open the default website on the desktop; apply a distance/generator change and verify Wokwi Serial Monitor and dashboard telemetry update.
+5. Move Wokwi's sensor slider or generator switch; verify it takes control back and both dashboard views update.
+6. Open the same website with `?view=mobile`; verify readings, graph, and tank are visible but no control widgets appear.
+7. Test theft with generator OFF and a drop greater than 5 percentage points within 60 seconds; compare LCD, buzzer, `theft` feed, and dashboard.
+8. Test generator ON with gradual decline; verify the hours-left value is available only when a usable trend exists.
 
 The live dashboard displays the firmware alarm and uses an explainable rapid-drop threshold. The separate offline simulator dashboard includes an ML demonstration model trained on synthetic data; it is not validated against real theft observations.
 
@@ -68,4 +80,4 @@ Adafruit IO can show graphs without deploying the Python dashboard:
 4. Add **Gauge** blocks for `level` (0–100) and `litres` (0–500), plus **Indicator** blocks for `pump`, `generator`, and `theft`.
 5. Save the dashboard and keep the Wokwi simulation running to produce graph data.
 
-For the custom mobile monitoring website, deploy `dashboard/app.py` to Streamlit Community Cloud and add the Adafruit username/key under that app's private **Settings → Secrets**. This dashboard adds a level-history Plotly graph, system status, and an interactive WebGL tank that follows the reported level.
+The website provides a live Plotly graph, system status, and an interactive WebGL tank that follows the reported level. Its mobile URL is read-only; use the default desktop URL for simulation controls.

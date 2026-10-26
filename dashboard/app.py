@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import hmac
 from pathlib import Path
 import time
 
@@ -8,7 +9,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
-from adafruit_history import parse_level_history
+from adafruit_client import (
+    decode_remote_command,
+    encode_remote_command,
+    fetch_latest_feed,
+    fetch_level_history,
+    publish_command,
+)
 from monitor_logic import detect_rapid_drop
 from tank_view import build_tank_html
 
@@ -29,43 +36,20 @@ TANK_CAPACITY_LITRES = 500.0
 HISTORY_LIMIT = 500
 
 
-def fetch_level_history(username: str, key: str) -> list[dict[str, float | datetime]]:
-    url = f"https://io.adafruit.com/api/v2/{username}/feeds/level/data"
-    response = requests.get(
-        url,
-        headers={"X-AIO-Key": key},
-        params={"limit": HISTORY_LIMIT},
-        timeout=10,
-    )
-    response.raise_for_status()
-    return parse_level_history(response.json())
-
-
-def fetch_latest_feed(username: str, key: str, feed: str) -> tuple[float, datetime]:
-    url = f"https://io.adafruit.com/api/v2/{username}/feeds/{feed}/data/last"
-    response = requests.get(
-        url,
-        headers={"X-AIO-Key": key},
-        timeout=10,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    try:
-        value = float(payload["value"])
-        timestamp = datetime.fromisoformat(
-            payload["created_at"].replace("Z", "+00:00")
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(f"Feed '{feed}' returned an invalid latest-data record.") from exc
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
-    return value, timestamp
-
-
 def render_tank(level: float, litres: float) -> None:
     template_path = Path(__file__).parent / "assets" / "tank_viewer.html"
     html = build_tank_html(template_path, level, litres)
     components.html(html, height=390, scrolling=False)
+
+
+def unlock_control_session() -> None:
+    supplied = st.session_state.get("control-password", "")
+    expected = st.secrets.get("CONTROL_PASSWORD", "")
+    st.session_state.controls_unlocked = bool(
+        expected and hmac.compare_digest(supplied, expected)
+    )
+    st.session_state.control_password_invalid = not st.session_state.controls_unlocked
+    st.session_state["control-password"] = ""
 
 
 st.set_page_config(
@@ -103,10 +87,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.title("⛽ Diesel Tank Monitor")
+mobile_view = st.experimental_get_query_params().get("view", ["desktop"])[0] == "mobile"
 st.markdown(
-    '<div class="hero-note">Live simulation monitor · 500 L diesel chamber</div>',
+    '<div class="hero-note">'
+    + ("Read-only live monitor" if mobile_view else "Live control room")
+    + " · 500 L diesel chamber</div>",
     unsafe_allow_html=True,
 )
+if not mobile_view:
+    st.caption("Desktop control view · Mobile read-only view: add `?view=mobile` to this URL.")
+    st.markdown("[Open read-only mobile view](?view=mobile)")
 st_autorefresh(interval=POLL_INTERVAL_MS, key="feed-refresh")
 
 try:
@@ -129,6 +119,16 @@ except (requests.RequestException, ValueError) as exc:
     st.error(f"Could not load Adafruit IO data. Check the feed names and app secrets. Details: {exc}")
     st.stop()
 
+command_reading = None
+command_error = None
+if not mobile_view:
+    try:
+        command_reading = fetch_latest_feed(username, aio_key, "command")
+    except requests.HTTPError as exc:
+        command_error = exc
+    except (requests.RequestException, ValueError) as exc:
+        command_error = exc
+
 values = {feed: data[0] for feed, data in readings.items()}
 latest_timestamp = max(data[1] for data in readings.values())
 age_seconds = max(0, int((datetime.now(timezone.utc) - latest_timestamp).total_seconds()))
@@ -141,6 +141,80 @@ generator_on = values["generator"] >= 0.5
 pump_on = values["pump"] >= 0.5
 firmware_alarm = values["theft"] >= 0.5
 level_status = "LOW" if level < 20 else "FULL" if level > 90 else "MEDIUM"
+
+remote_command = (
+    decode_remote_command(command_reading[0])
+    if command_reading is not None
+    else None
+)
+if not mobile_view:
+    st.subheader("Simulation controls")
+    st.caption(
+        "Dashboard controls set virtual ESP32 inputs. A physical sensor or switch "
+        "change in Wokwi takes control back; Wokwi's component graphics do not move remotely."
+    )
+    control_password = st.secrets.get("CONTROL_PASSWORD", "")
+    if not control_password:
+        st.error(
+            "Remote controls are locked. Set a private CONTROL_PASSWORD in the "
+            "Streamlit app secrets before enabling dashboard controls."
+        )
+    elif not st.session_state.get("controls_unlocked", False):
+        st.text_input("Control password", type="password", key="control-password")
+        st.button("Unlock controls", on_click=unlock_control_session)
+        if st.session_state.get("control_password_invalid", False):
+            st.error("Incorrect control password.")
+
+    if st.session_state.get("controls_unlocked", False):
+        if command_error is not None:
+            st.warning(
+                "Remote controls are unavailable. Create the Adafruit IO `command` feed "
+                f"and verify its API access. Details: {command_error}"
+            )
+        else:
+            mode_label = "Dashboard virtual inputs" if remote_command else "Wokwi controls"
+            st.info(f"Current input source: **{mode_label}**")
+            if "control_distance" not in st.session_state:
+                initial_distance = (
+                    remote_command[0] if remote_command else values["distance"]
+                )
+                st.session_state.control_distance = max(
+                    5.0, min(105.0, initial_distance)
+                )
+            if "control_generator" not in st.session_state:
+                st.session_state.control_generator = (
+                    remote_command[1] if remote_command else generator_on
+                )
+            with st.form("simulation-controls"):
+                st.slider(
+                    "Virtual sensor distance",
+                    min_value=5.0,
+                    max_value=105.0,
+                    step=0.5,
+                    key="control_distance",
+                    help="5 cm is full and 105 cm is empty. This changes the firmware input, not the Wokwi slider graphic.",
+                )
+                st.toggle("Generator running", key="control_generator")
+                apply_inputs = st.form_submit_button("Apply dashboard inputs")
+            release_inputs = st.button("Return control to Wokwi")
+            if apply_inputs:
+                try:
+                    code = encode_remote_command(
+                        st.session_state.control_distance,
+                        st.session_state.control_generator,
+                    )
+                    publish_command(username, aio_key, code)
+                    st.success(
+                        "Inputs sent. Wokwi firmware will apply them on its next command poll."
+                    )
+                except (requests.RequestException, ValueError) as exc:
+                    st.error(f"Could not send simulation controls: {exc}")
+            if release_inputs:
+                try:
+                    publish_command(username, aio_key, 0)
+                    st.success("Control released. Wokwi sensor and switch are active again.")
+                except requests.RequestException as exc:
+                    st.error(f"Could not release dashboard controls: {exc}")
 
 if "level_history" not in st.session_state:
     st.session_state.level_history = []
@@ -165,7 +239,11 @@ dashboard_alarm = (
 alarm = firmware_alarm or dashboard_alarm
 
 st.subheader("Live status")
-first, second, third, fourth = st.columns(4)
+if mobile_view:
+    first, second = st.columns(2)
+    third, fourth = st.columns(2)
+else:
+    first, second, third, fourth = st.columns(4)
 first.metric("Tank level", f"{level:.1f}%", level_status)
 second.metric("Fuel volume", f"{litres:.1f} L", f"of {TANK_CAPACITY_LITRES:.0f} L")
 third.metric("Generator", "RUNNING" if generator_on else "STOPPED")

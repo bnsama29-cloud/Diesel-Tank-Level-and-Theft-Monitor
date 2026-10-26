@@ -2,6 +2,8 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <ctype.h>
+#include <math.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -44,13 +46,30 @@ int historyCount = 0;
 unsigned long lastSampleTime = 0;
 unsigned long lastLcdTime = 0;
 unsigned long lastCloudPublish = 0;
+unsigned long lastCommandPoll = 0;
+float physicalDistanceCm = -1.0f;
+float lastStablePhysicalDistanceCm = -1.0f;
+float dashboardDistanceCm = -1.0f;
+int physicalDistanceChangeSamples = 0;
+bool physicalSensorOK = false;
+bool physicalGeneratorOn = false;
+bool previousPhysicalGeneratorOn = false;
+bool physicalInputsInitialized = false;
+bool dashboardOverride = false;
+bool dashboardGeneratorOn = false;
+bool ignoreRemoteUntilRelease = false;
+String lastCommandTimestamp = "";
+String ignoredCommandTimestamp = "";
 
 // =====================================================
 // 5. TIMING AND CLOUD SETTINGS
-// Seven feeds every 20 seconds = 21 data points/minute.
+// Seven telemetry feeds every 20 seconds = 21 data points/minute.
 // =====================================================
 const unsigned long LCD_INTERVAL_MS = 500UL;
 const unsigned long CLOUD_PUBLISH_MS = 20000UL;
+const unsigned long COMMAND_POLL_MS = 10000UL;
+const long REMOTE_COMMAND_BASE = 10000L;
+const long REMOTE_GENERATOR_OFFSET = 2000L;
 const bool ENABLE_CLOUD = true;
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
@@ -68,6 +87,8 @@ int relayLevel(bool on) {
   return on ? HIGH : LOW;
 }
 
+bool publishFeedValue(const char* feedKey, const String& value);
+
 float readDistanceCm() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(3);
@@ -80,15 +101,58 @@ float readDistanceCm() {
   return duration * 0.0343f / 2.0f;
 }
 
-void updateTankLevel() {
+void updatePhysicalInputs() {
   const float measuredDistance = readDistanceCm();
-  // Distances beyond the calibrated empty point represent an empty tank.
-  if (measuredDistance < 2.0f || measuredDistance > 400.0f) {
-    sensorOK = false;
-    return;
+  physicalSensorOK = measuredDistance >= 2.0f && measuredDistance <= 400.0f;
+  if (physicalSensorOK) physicalDistanceCm = measuredDistance;
+  physicalGeneratorOn = digitalRead(GENERATOR_SWITCH_PIN) == HIGH;
+
+  bool physicalInputChanged = false;
+  if (!physicalInputsInitialized) {
+    if (physicalSensorOK) lastStablePhysicalDistanceCm = physicalDistanceCm;
+    previousPhysicalGeneratorOn = physicalGeneratorOn;
+    physicalInputsInitialized = true;
+  } else {
+    if (physicalSensorOK && lastStablePhysicalDistanceCm >= 0.0f) {
+      if (fabs(physicalDistanceCm - lastStablePhysicalDistanceCm) >= 1.5f) {
+        physicalDistanceChangeSamples++;
+        if (physicalDistanceChangeSamples >= 3) {
+          lastStablePhysicalDistanceCm = physicalDistanceCm;
+          physicalDistanceChangeSamples = 0;
+          physicalInputChanged = true;
+        }
+      } else {
+        physicalDistanceChangeSamples = 0;
+      }
+    }
+    if (physicalGeneratorOn != previousPhysicalGeneratorOn) {
+      previousPhysicalGeneratorOn = physicalGeneratorOn;
+      physicalInputChanged = true;
+    }
   }
 
-  distanceCm = measuredDistance;
+  if (dashboardOverride && physicalInputChanged) {
+    dashboardOverride = false;
+    ignoreRemoteUntilRelease = true;
+    ignoredCommandTimestamp = lastCommandTimestamp;
+    Serial.println("Wokwi input changed; returning control to Wokwi.");
+    if (WiFi.status() == WL_CONNECTED &&
+        publishFeedValue("command", "0")) {
+      ignoreRemoteUntilRelease = false;
+    } else {
+      Serial.println("Could not clear the remote command; ignoring it until released.");
+    }
+  }
+}
+
+void updateTankLevel() {
+  sensorOK = dashboardOverride || physicalSensorOK;
+  generatorOn = dashboardOverride
+                    ? dashboardGeneratorOn
+                    : physicalGeneratorOn;
+  if (!sensorOK) return;
+
+  distanceCm = dashboardOverride ? dashboardDistanceCm : physicalDistanceCm;
   float fraction = (EMPTY_DISTANCE_CM - distanceCm) /
                    (EMPTY_DISTANCE_CM - FULL_DISTANCE_CM);
   fraction = constrain(fraction, 0.0f, 1.0f);
@@ -117,8 +181,108 @@ void updateLEDs() {
   digitalWrite(LED_FULL, full ? HIGH : LOW);
 }
 
-void updateGeneratorState() {
-  generatorOn = (digitalRead(GENERATOR_SWITCH_PIN) == HIGH);
+bool extractJsonField(const String& json, const char* field, String& value) {
+  const String key = String("\"") + field + "\"";
+  int position = json.indexOf(key);
+  if (position < 0) return false;
+  position = json.indexOf(':', position + key.length());
+  if (position < 0) return false;
+  position++;
+  while (position < static_cast<int>(json.length()) &&
+         isspace(static_cast<unsigned char>(json[position]))) {
+    position++;
+  }
+  if (position >= static_cast<int>(json.length())) return false;
+
+  const bool quoted = json[position] == '"';
+  if (quoted) position++;
+  const int end = quoted
+                      ? json.indexOf('"', position)
+                      : min(json.indexOf(',', position) < 0
+                                ? static_cast<int>(json.length())
+                                : json.indexOf(',', position),
+                            json.indexOf('}', position) < 0
+                                ? static_cast<int>(json.length())
+                                : json.indexOf('}', position));
+  if (end < position) return false;
+  value = json.substring(position, end);
+  value.trim();
+  return true;
+}
+
+bool decodeRemoteCommand(long code, float* remoteDistance, bool* remoteGenerator) {
+  const long packed = code - REMOTE_COMMAND_BASE;
+  if (packed < 50 || packed > REMOTE_GENERATOR_OFFSET + 1050) return false;
+  *remoteGenerator = packed >= REMOTE_GENERATOR_OFFSET;
+  const long distanceTenths =
+      packed - (*remoteGenerator ? REMOTE_GENERATOR_OFFSET : 0);
+  if (distanceTenths < 50 || distanceTenths > 1050) return false;
+  *remoteDistance = distanceTenths / 10.0f;
+  return true;
+}
+
+void pollDashboardCommand() {
+  if (!ENABLE_CLOUD || WiFi.status() != WL_CONNECTED) return;
+  const unsigned long now = millis();
+  if (now - lastCommandPoll < COMMAND_POLL_MS) return;
+  lastCommandPoll = now;
+
+  WiFiClientSecure client;
+  client.setCACert(AIO_ROOT_CA);
+  HTTPClient https;
+  const String url = String("https://") + AIO_HOST + "/api/v2/" +
+                     AIO_USERNAME + "/feeds/command/data/last";
+  https.setTimeout(5000);
+  if (!https.begin(client, url)) {
+    Serial.println("Could not start dashboard-command request.");
+    return;
+  }
+  https.addHeader("X-AIO-Key", AIO_KEY);
+  const int status = https.GET();
+  if (status < 200 || status >= 300) {
+    Serial.printf("Adafruit command feed: HTTP %d\n", status);
+    https.end();
+    return;
+  }
+
+  const String body = https.getString();
+  https.end();
+  String value;
+  String timestamp;
+  if (!extractJsonField(body, "value", value) ||
+      !extractJsonField(body, "created_at", timestamp)) {
+    Serial.println("Dashboard command response was invalid.");
+    return;
+  }
+  if (timestamp == lastCommandTimestamp) return;
+  lastCommandTimestamp = timestamp;
+  if (timestamp == ignoredCommandTimestamp) return;
+
+  const long command = value.toInt();
+  if (command == 0) {
+    dashboardOverride = false;
+    ignoreRemoteUntilRelease = false;
+    Serial.println("Dashboard control released; Wokwi inputs are active.");
+    return;
+  }
+
+  float requestedDistance = -1.0f;
+  bool requestedGenerator = false;
+  if (!decodeRemoteCommand(command, &requestedDistance, &requestedGenerator)) {
+    Serial.println("Ignoring invalid dashboard command.");
+    return;
+  }
+  if (ignoreRemoteUntilRelease) {
+    Serial.println("Ignoring remote inputs until a release command arrives.");
+    return;
+  }
+
+  dashboardDistanceCm = requestedDistance;
+  dashboardGeneratorOn = requestedGenerator;
+  dashboardOverride = true;
+  Serial.printf("Dashboard virtual inputs applied: %.1f cm, generator %s.\n",
+                dashboardDistanceCm,
+                dashboardGeneratorOn ? "ON" : "OFF");
 }
 
 int oldestSampleAtLeast(unsigned long minimumAge, unsigned long now,
@@ -277,8 +441,9 @@ void setup() {
 }
 
 void loop() {
+  pollDashboardCommand();
+  updatePhysicalInputs();
   updateTankLevel();
-  updateGeneratorState();
   updatePump();
   updateLEDs();
   recordLevel();
