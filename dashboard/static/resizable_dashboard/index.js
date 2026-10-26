@@ -8,6 +8,13 @@
   const $ = id => document.getElementById(id);
 
   const setText = (id, value) => { $(id).textContent = value; };
+  const setFrameHeight = () => {
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setFrameHeight",
+      height: frameHeight,
+    }, "*");
+  };
 
   const applySizes = () => {
     dashboard.style.setProperty("--left-size", `${sizes.left}%`);
@@ -110,11 +117,7 @@
       chart.hidden = true;
       emptyChart.hidden = false;
     }
-    window.parent.postMessage({
-      isStreamlitMessage: true,
-      type: "streamlit:setFrameHeight",
-      height: frameHeight,
-    }, "*");
+    setFrameHeight();
   };
 
   const escapeHtml = value => String(value)
@@ -124,13 +127,25 @@
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
+  render({
+    latest: null,
+    status: "Waiting for telemetry",
+    explanation: "Start Wokwi to receive live readings.",
+    freshness: "WAITING",
+    age_seconds: null,
+    chart: null,
+    fetch_error: null,
+  });
+
   window.addEventListener("message", event => {
     if (event.data && event.data.type === "streamlit:render") {
       render(event.data.args);
     }
   });
   window.parent.postMessage({
+    isStreamlitMessage: true,
     type: "streamlit:componentReady",
     apiVersion: 1,
   }, "*");
+  window.setTimeout(setFrameHeight, 0);
 })();

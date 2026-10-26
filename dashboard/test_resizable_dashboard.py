@@ -22,6 +22,9 @@ class ResizableDashboardTests(unittest.TestCase):
         self.assertIn("Plotly.react", script)
         self.assertIn("streamlit:render", script)
         self.assertIn("window.screen.availHeight", script)
+        self.assertIn("isStreamlitMessage: true", script)
+        self.assertIn("streamlit:componentReady", script)
+        self.assertIn("streamlit:setFrameHeight", script)
 
     @patch("resizable_dashboard._dashboard_component")
     def test_component_receives_latest_values_and_graph_with_stable_key(self, component):
