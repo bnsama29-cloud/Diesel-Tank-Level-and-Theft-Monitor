@@ -6,53 +6,113 @@
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; background: #0e1726; color: #e5edf8; }
-    .stage { height: 360px; display: grid; place-items: center; overflow: hidden; }
-    .tank { position: relative; width: 230px; height: 230px; transform: skewY(-4deg); }
-    .front {
-      position: absolute; inset: 22px 40px 20px 20px; overflow: hidden;
-      border: 3px solid #91a9c6; border-radius: 8px 8px 14px 14px;
-      background: linear-gradient(90deg, #18283b, #243b54); z-index: 2;
-    }
-    .side {
-      position: absolute; top: 25px; right: 17px; width: 24px; height: 204px;
-      transform: skewY(-28deg); transform-origin: left top;
-      border: 3px solid #7892af; background: #1b3149;
-    }
-    .top {
-      position: absolute; top: 8px; left: 20px; width: 176px; height: 35px;
-      transform: skewX(-48deg); border: 3px solid #7892af; border-radius: 8px;
-      background: #263e59;
-    }
-    .liquid {
-      position: absolute; inset: auto 0 0; height: var(--level);
-      background: linear-gradient(180deg, #29c4df, #0879b7);
-      transition: height .7s ease;
-    }
-    .surface {
-      position: absolute; top: -9px; left: 0; width: 100%; height: 18px;
-      border-radius: 50%; background: #5de3ed; opacity: .8;
-    }
-    .scale { position: absolute; z-index: 3; top: 30px; right: 10px; height: 190px;
-      display: flex; flex-direction: column; justify-content: space-between;
-      color: #cbd5e1; font-size: 11px; }
-    .label { position: absolute; bottom: -20px; width: 100%; text-align: center;
-      color: #dbeafe; font-weight: 600; }
-    .reading { position: absolute; bottom: 14px; width: 100%; text-align: center;
-      z-index: 4; font-size: 19px; font-weight: 700; text-shadow: 0 1px 4px #001; }
+    main { height: 370px; display: grid; place-items: center; }
+    canvas { width: 100%; height: 100%; max-width: 560px; }
   </style>
 </head>
 <body>
-  <main class="stage">
-    <div class="tank" style="--level: __LEVEL_PERCENT__%">
-      <div class="top"></div>
-      <div class="side"></div>
-      <div class="front">
-        <div class="liquid"><div class="surface"></div></div>
-        <div class="reading">__LEVEL_PERCENT__%</div>
-      </div>
-      <div class="scale"><span>100%</span><span>50%</span><span>0%</span></div>
-      <div class="label">500 L Diesel Tank</div>
-    </div>
+  <main>
+    <canvas id="tank" aria-label="3D tank visualization"></canvas>
   </main>
+  <script>
+    (() => {
+      const canvas = document.getElementById("tank");
+      const ctx = canvas.getContext("2d");
+      const level = Math.max(0, Math.min(100, Number("__LEVEL_PERCENT__")));
+
+      function polygon(points, fill, stroke, lineWidth = 1) {
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (const point of points.slice(1)) ctx.lineTo(point[0], point[1]);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineWidth;
+          ctx.stroke();
+        }
+      }
+
+      function draw() {
+        const ratio = window.devicePixelRatio || 1;
+        const bounds = canvas.getBoundingClientRect();
+        canvas.width = Math.round(bounds.width * ratio);
+        canvas.height = Math.round(bounds.height * ratio);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, bounds.width, bounds.height);
+
+        const scale = Math.min(bounds.width / 370, bounds.height / 300);
+        ctx.save();
+        ctx.translate((bounds.width - 300 * scale) / 2, 22 * scale);
+        ctx.scale(scale, scale);
+
+        const x = 70;
+        const top = 45;
+        const width = 150;
+        const height = 205;
+        const depthX = 48;
+        const depthY = -29;
+        const bottom = top + height;
+        const liquidY = bottom - height * level / 100;
+        const outline = "#a8bdd4";
+
+        polygon(
+          [[x, top], [x + depthX, top + depthY], [x + width + depthX, top + depthY],
+           [x + width, top]],
+          "#344c66", outline, 2
+        );
+        polygon(
+          [[x + width, top], [x + width + depthX, top + depthY],
+           [x + width + depthX, bottom + depthY], [x + width, bottom]],
+          "#1b3046", outline, 2
+        );
+        polygon(
+          [[x, liquidY], [x + width, liquidY], [x + width, bottom], [x, bottom]],
+          level > 0 ? "#0879b7" : "#17283a"
+        );
+        if (level > 0) {
+          polygon(
+            [[x + width, liquidY], [x + width + depthX, liquidY + depthY],
+             [x + width + depthX, bottom + depthY], [x + width, bottom]],
+            "#075d91"
+          );
+          polygon(
+            [[x, liquidY], [x + depthX, liquidY + depthY],
+             [x + width + depthX, liquidY + depthY], [x + width, liquidY]],
+            "#45d8e8"
+          );
+        }
+        polygon(
+          [[x, top], [x + width, top], [x + width, bottom], [x, bottom]],
+          "rgba(22, 44, 65, 0.15)", outline, 3
+        );
+
+        ctx.strokeStyle = "rgba(205, 224, 243, .42)";
+        ctx.lineWidth = 1;
+        for (let tick = 1; tick < 10; tick++) {
+          const y = top + height * tick / 10;
+          ctx.beginPath();
+          ctx.moveTo(x + width - 12, y);
+          ctx.lineTo(x + width, y);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "#e5edf8";
+        ctx.textAlign = "center";
+        ctx.font = "600 20px system-ui, sans-serif";
+        ctx.fillText(`${level.toFixed(1)}%`, x + width / 2, bottom - 14);
+        ctx.font = "600 14px system-ui, sans-serif";
+        ctx.fillText("500 L DIESEL TANK", 170, 290);
+        ctx.fillStyle = "#9fb3c9";
+        ctx.font = "12px system-ui, sans-serif";
+        ctx.fillText(`${(level * 5).toFixed(1)} L`, 170, 310);
+        ctx.restore();
+      }
+
+      draw();
+      new ResizeObserver(draw).observe(canvas);
+    })();
+  </script>
 </body>
 </html>

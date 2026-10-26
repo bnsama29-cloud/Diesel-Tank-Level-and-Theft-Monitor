@@ -1,6 +1,6 @@
 # Person 2 — Dashboard and anomaly analysis
 
-The Streamlit app reads the latest values from the seven Adafruit IO feeds, shows the current level/pump/generator/alarm state, and embeds the tank viewer. It also applies the required transparent rapid-drop rule to readings observed by the dashboard.
+The Streamlit app reads the latest values from the seven Adafruit IO feeds, shows the current level/pump/generator/alarm state, and embeds the procedural 3D tank viewer. It also applies the required transparent rapid-drop rule to readings observed by the dashboard.
 
 ## Run/deploy in the browser
 
@@ -19,3 +19,7 @@ Do not add a `.streamlit/secrets.toml` file or a real key to GitHub. Local launc
 ## ML handoff
 
 The current detection is a 5-percentage-point / 60-second rule, matching the hardware requirement. It is not machine learning. Person 2 can later add a trained classifier once the team has labeled readings for normal generator consumption, refill events, sensor noise, and theft-like drops. Compare any model against the threshold baseline and preserve the explicit safety alarm behavior.
+
+## How the shared system connects
+
+The ESP32 publishes values to Adafruit IO over HTTPS. This dashboard reads the latest value from each agreed feed and embeds the level-controlled tank from `person3-3d-tank/tank_viewer.html`. All three parts use the field definitions and secret-handling instructions in [`../integration/README.md`](../integration/README.md).
