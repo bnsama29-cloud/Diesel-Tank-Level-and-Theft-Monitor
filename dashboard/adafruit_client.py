@@ -30,7 +30,12 @@ def decode_remote_command(value: float) -> tuple[float, bool] | None:
     return offset / 10, generator_on
 
 
-def fetch_latest_feed(username: str, key: str, feed: str) -> tuple[float, datetime]:
+def fetch_latest_feed(
+    username: str,
+    key: str,
+    feed: str,
+    allow_empty: bool = False,
+) -> tuple[float, datetime] | None:
     url = (
         f"https://io.adafruit.com/api/v2/{quote(username, safe='')}"
         f"/feeds/{quote(feed, safe='')}/data/last"
@@ -38,6 +43,8 @@ def fetch_latest_feed(username: str, key: str, feed: str) -> tuple[float, dateti
     response = requests.get(url, headers={"X-AIO-Key": key}, timeout=10)
     response.raise_for_status()
     payload = response.json()
+    if allow_empty and isinstance(payload, dict) and payload.get("value") in (None, ""):
+        return None
     try:
         value = float(payload["value"])
         timestamp = datetime.fromisoformat(
@@ -52,7 +59,7 @@ def fetch_latest_feed(username: str, key: str, feed: str) -> tuple[float, dateti
 
 def fetch_latest_command(username: str, key: str) -> tuple[float, datetime] | None:
     try:
-        return fetch_latest_feed(username, key, "command")
+        return fetch_latest_feed(username, key, "command", allow_empty=True)
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code == 404:
             return None

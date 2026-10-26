@@ -55,6 +55,13 @@ class RemoteCommandTests(unittest.TestCase):
         with self.assertRaises(requests.HTTPError):
             fetch_latest_command("tank-user", "private-key")
 
+    @patch("adafruit_client.requests.get")
+    def test_blank_latest_command_value_is_treated_as_no_active_override(self, get):
+        response = Mock()
+        response.json.return_value = {"value": "", "created_at": "2026-10-26T10:00:00Z"}
+        get.return_value = response
+        self.assertIsNone(fetch_latest_command("tank-user", "private-key"))
+
 
 if __name__ == "__main__":
     unittest.main()
