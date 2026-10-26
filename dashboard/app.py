@@ -6,7 +6,6 @@ from typing import Any
 import plotly.graph_objects as go
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 dashboard_dir = str(Path(__file__).resolve().parent)
 if dashboard_dir not in sys.path:
@@ -14,7 +13,7 @@ if dashboard_dir not in sys.path:
 
 from adafruit_client import fetch_telemetry_history
 from monitor_logic import detect_rapid_drop
-from wokwi_embed import build_wokwi_embed_html
+from resizable_dashboard import render_resizable_dashboard
 
 
 POLL_INTERVAL_SECONDS = 3
@@ -193,7 +192,12 @@ def build_level_chart(history: list[dict[str, Any]]) -> go.Figure:
 
 
 @st.fragment(run_every=POLL_INTERVAL_SECONDS)
-def render_live_dashboard(username: str, key: str, feed: str) -> None:
+def render_live_dashboard(
+    username: str,
+    key: str,
+    feed: str,
+    resizable_layout: bool = False,
+) -> None:
     try:
         history = fetch_telemetry_history(username, key, feed, HISTORY_LIMIT)
         st.session_state.telemetry_history = history
@@ -204,6 +208,17 @@ def render_live_dashboard(username: str, key: str, feed: str) -> None:
 
     fetch_error = st.session_state.get("telemetry_fetch_error")
     if not history:
+        if resizable_layout:
+            render_resizable_dashboard(
+                latest=None,
+                status="Waiting for telemetry",
+                explanation="Start Wokwi to receive live readings.",
+                freshness="WAITING",
+                age_seconds=None,
+                figure_json=None,
+                fetch_error=fetch_error,
+            )
+            return
         st.error(
             "Waiting for telemetry from Adafruit IO. Start Wokwi and confirm the "
             "feed key and Adafruit credentials."
@@ -223,6 +238,25 @@ def render_live_dashboard(username: str, key: str, feed: str) -> None:
 
     alarm = derive_theft_alarm(history)
     status, explanation = interpretation(latest, history, alarm)
+    if resizable_layout:
+        cutoff = now - timedelta(minutes=5)
+        visible_history = [
+            reading for reading in history if reading["timestamp"] >= cutoff
+        ]
+        chart_html = ""
+        if len(visible_history) > 1:
+            chart_html = build_level_chart(visible_history).to_json()
+        render_resizable_dashboard(
+            latest=latest,
+            status=status,
+            explanation=explanation,
+            freshness="LIVE" if connected else "STALE",
+            age_seconds=age_seconds,
+            figure_json=chart_html or None,
+            fetch_error=fetch_error,
+        )
+        return
+
     st.subheader("System interpretation")
     if not connected:
         st.warning(
@@ -297,14 +331,6 @@ def render_live_dashboard(username: str, key: str, feed: str) -> None:
     )
 
 
-def render_wokwi() -> None:
-    components.html(
-        build_wokwi_embed_html(),
-        height=840,
-        scrolling=False,
-    )
-
-
 st.set_page_config(
     page_title="Diesel Tank Monitor",
     page_icon="⛽",
@@ -315,7 +341,7 @@ st.markdown(
     """
     <style>
       .stApp { background: radial-gradient(ellipse at 15% 0%, #17324a 0, #0b1220 42%); }
-      .block-container { max-width: 1920px; padding-top: 1.4rem; }
+      .block-container { max-width: none; width: 100%; padding: 1rem 1rem 0; }
       h1, h2, h3 { letter-spacing: -0.025em; }
       div[data-testid="stMetric"] {
         background: linear-gradient(145deg, rgba(25,46,67,.96), rgba(15,27,42,.96));
@@ -361,13 +387,9 @@ if mobile_view:
     )
     render_live_dashboard(aio_username, aio_key, aio_feed)
 else:
-    dashboard_column, simulation_column = st.columns([0.8, 1.2], gap="large")
-    with dashboard_column:
-        render_live_dashboard(aio_username, aio_key, aio_feed)
-    with simulation_column:
-        st.subheader("Wokwi simulation")
-        st.caption(
-            "Change the distance slider and generator switch. "
-            "On phones, use the read-only dashboard and open Wokwi separately."
-        )
-        render_wokwi()
+    render_live_dashboard(
+        aio_username,
+        aio_key,
+        aio_feed,
+        resizable_layout=True,
+    )

@@ -6,7 +6,7 @@ Deploy `app.py` to Streamlit Community Cloud and add the Adafruit IO secrets lis
 
 The responsive dashboard prioritizes current fuel, generator and pump state, calculated runtime, feed freshness, rule-based interpretation, and a fuel-level graph. Refill and firmware theft events are marked on the graph when present. The 3D tank viewer is deferred and is not a dependency of the live monitor.
 
-On desktop the page embeds Wokwi beside the monitor. Add `?view=mobile` for the read-only monitor and a link to open Wokwi separately. The Wokwi project is separate from Git; copy the updated sketch, corrected diagram, and private Adafruit settings into Wokwi.
+On desktop, the live layout starts with interpretation and graph stacked in the left 25% and Wokwi in the right 75%. Drag the vertical divider to resize the left and right areas, and drag the horizontal divider to resize the interpretation and graph panels. The splitters remain in place while telemetry refreshes. Add `?view=mobile` for the read-only monitor and a link to open Wokwi separately. The Wokwi project is separate from Git; copy the updated sketch, corrected diagram, and private Adafruit settings into Wokwi.
 
 The dashboard uses the explicit rule “more than 5 percentage points in 60 seconds while generator OFF” for suspected theft. The offline simulator's ML model is separate and is not a validated real-world classifier.
 

@@ -10,7 +10,7 @@ Wokwi ESP32 -- HTTPS, one JSON telemetry value every 3 seconds --> Adafruit IO f
                                                 Streamlit desktop + mobile dashboard
 ```
 
-The circuit remains the simulation control surface; dashboard controls are not used. The desktop page shows the Wokwi simulation beside live readings. Add `?view=mobile` for a read-only dashboard with a link to open Wokwi separately. The live dashboard does not load the 3D tank.
+The circuit remains the simulation control surface; dashboard controls are not used. The desktop page starts with interpretation and graph panels stacked in the left 25% and Wokwi in the right 75%. Drag the vertical splitter to change the left/right widths and the horizontal splitter to resize the interpretation and graph. These panel sizes remain unchanged during telemetry refreshes. Add `?view=mobile` for a read-only dashboard with a link to open Wokwi separately. The live dashboard does not load the 3D tank.
 
 The ESP32 writes one feed point every 3 seconds (20 writes per minute), instead of writing seven separate feed points. The dashboard requests recent feed history every 3 seconds and marks readings stale after 10 seconds. Actual latency depends on Wokwi, Adafruit IO, Streamlit, network, and browser scheduling. The graph shows the recent points returned by Adafruit IO; it is not a permanent database.
 
