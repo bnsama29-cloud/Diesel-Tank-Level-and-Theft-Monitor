@@ -8,8 +8,9 @@ import requests
 import streamlit as st
 
 dashboard_dir = str(Path(__file__).resolve().parent)
-if dashboard_dir not in sys.path:
-    sys.path.insert(0, dashboard_dir)
+while dashboard_dir in sys.path:
+    sys.path.remove(dashboard_dir)
+sys.path.insert(0, dashboard_dir)
 
 from adafruit_client import fetch_telemetry_history, post_manual_acknowledgment
 from monitor_logic import detect_rapid_drop
