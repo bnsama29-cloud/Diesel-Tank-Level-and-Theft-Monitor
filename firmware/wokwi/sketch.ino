@@ -292,6 +292,8 @@ void publishTelemetry() {
   }
   memcpy(body + bodyLength, suffix, sizeof(suffix));
 
+  Serial.printf("Adafruit IO value: %s\n", telemetry);
+
   WiFiClientSecure networkClient;
   networkClient.setCACert(AIO_ROOT_CA);
   HTTPClient https;

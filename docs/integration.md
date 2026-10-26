@@ -68,7 +68,7 @@ The ESP32 posts one Adafruit IO data point with a string value containing this J
 ## Run and verify
 
 1. Add matching AIO username, key, and feed key to Streamlit and the private Wokwi `secrets.h`.
-2. Start Wokwi. Confirm Wi-Fi connects and the Serial Monitor logs `Adafruit IO telemetry: HTTP 200` around every 3 seconds.
+2. Start Wokwi. Confirm Wi-Fi connects and the Serial Monitor prints `Adafruit IO value: {...}` followed by `Adafruit IO telemetry: HTTP 200` for successful posts.
 3. Open the desktop dashboard. It should show **LIVE**, last-received age, fuel in litres and percent, generator, pump, runtime estimate, and a plain-language interpretation.
 4. Move the distance slider. Confirm the LCD and LEDs update locally, then the dashboard values and graph follow within a few seconds.
 5. Test the pump hysteresis: it should turn ON at or below 20% and turn OFF only above 90%.
@@ -79,6 +79,7 @@ The ESP32 posts one Adafruit IO data point with a string value containing this J
 ## Troubleshooting and limits
 
 - **No HTTP 200:** confirm Wi-Fi, username, AIO key, feed key, and TLS root CA. Read the HTTP status logged by Wokwi and verify that the AIO key has write access.
+- **Slow Serial Monitor updates:** the local sensor and control loop runs continuously, but the HTTPS publish is synchronous and can block while connecting to Adafruit IO. The 3-second publish interval is a target minimum, not a guarantee; network/TLS time and the 5-second request timeout can stretch the time between completed uploads. The JSON line is printed immediately before each upload attempt.
 - **Feed updates but dashboard waits:** confirm Streamlit secrets exactly match the account and feed key, and that the feed's `value` contains the JSON object above.
 - **Dashboard shows stale data:** check the feed's latest record timestamp and whether Wokwi continues publishing. The page retains previous values after a request failure but explicitly flags them as stale and reports the error.
 - **Generator switch warning:** re-import the corrected `diagram.json`; its switch common is on GPIO 12 and outer pins connect to 3V3/GND.
