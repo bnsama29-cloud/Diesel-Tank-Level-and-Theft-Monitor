@@ -28,7 +28,7 @@ requirements.txt            Python dependencies
 
 ## Live dashboard setup
 
-1. Create a HiveMQ Cloud Starter trial cluster, MQTT credentials, and an access rule for `diesel-tank/telemetry`. The Starter trial is free for 15 days, not a permanent free tier; see [`docs/integration.md`](docs/integration.md).
+1. Create an EMQX Serverless deployment, keep its spend limit at zero to avoid usage-based charges, and create MQTT credentials for `diesel-tank/telemetry`; see [`docs/integration.md`](docs/integration.md).
 2. Deploy this repository to Streamlit Community Cloud with `dashboard/app.py` as the app file.
 3. Add the broker host, port, username, password, and topic as Streamlit app secrets.
 4. Configure the same broker values and trusted root CA certificate in a private Wokwi `secrets.h`.

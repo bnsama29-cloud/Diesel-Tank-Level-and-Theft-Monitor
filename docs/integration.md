@@ -3,7 +3,7 @@
 ## Architecture
 
 ```text
-Wokwi ESP32 -- MQTT over TLS (one retained JSON message every 2 seconds) --> HiveMQ Cloud
+Wokwi ESP32 -- MQTT over TLS (one retained JSON message every 2 seconds) --> EMQX Serverless
                                                                                |
                                                               MQTT subscription over TLS
                                                                                v
@@ -14,18 +14,17 @@ Adafruit IO is no longer part of the live path. The dashboard subscribes to the 
 
 The firmware publishes every 2 seconds and the Streamlit fragment redraws every 2 seconds. Typical display latency should be a few seconds, depending on Wokwi, broker, network, and browser scheduling. The dashboard marks telemetry stale after 8 seconds. MQTT messages are retained so a dashboard that connects after the simulator can receive its latest state. The dashboard keeps up to 3,600 readings in process memory; this chart history resets if the Streamlit app restarts and is not a permanent database.
 
-## Create a temporary HiveMQ Cloud broker
+## Create a free EMQX broker
 
-New HiveMQ Cloud Serverless clusters are no longer available. HiveMQ's current Starter option offers a 15-day free trial, not a permanent free tier. Its official guide says the trial requires no credit card; when the trial ends, the cluster is removed automatically unless you add a payment method and continue on a paid plan. Check the current plan and billing terms in HiveMQ before starting. Do not add a payment method if you do not want paid service.
+EMQX currently offers Serverless with a monthly free quota. EMQX's [pricing page](https://www.emqx.com/en/pricing) advertises a free Serverless option, and its [free broker guide](https://www.emqx.com/en/blog/free-mqtt-broker) lists 1 million session minutes, 1 GB of traffic, and 1 million rule actions per month. The project does not need rule actions. Quotas and plan terms can change, so verify them in the EMQX console before creating the deployment.
 
-This is suitable for a short project demonstration. For a longer-running deployment, choose a broker plan that remains within your budget or another managed broker with a currently available free tier.
+1. Create an EMQX account and create a **Serverless** deployment in a region near you.
+2. Set the deployment's **Spend Limit** to `0` so it pauses at the free quota rather than incurring usage charges. Confirm the console describes the same behavior before proceeding.
+3. When the deployment is running, copy its MQTT host and secure MQTT/TLS port from the connection information. Do not include a URL scheme in the host.
+4. Create MQTT credentials and permit publish and subscribe access to `diesel-tank/telemetry`.
+5. Get the trusted root CA PEM from EMQX's connection/TLS documentation. Keep certificate verification enabled.
 
-1. Create a HiveMQ Cloud account and start a Starter trial cluster.
-2. Copy the cluster hostname (hostname only, without `mqtts://`), its secure MQTT port, and create a username/password in the cluster's access management.
-3. Permit that username to publish and subscribe to `diesel-tank/telemetry` (or configure another single topic consistently on both ends).
-4. Obtain the broker's trusted root CA PEM from its TLS/certificate documentation. Do not disable certificate verification.
-
-Use the secure MQTT port shown in your cluster details in both the dashboard and Wokwi. The sample configuration below uses `8883`.
+Use the exact host and port shown by the EMQX console in both the dashboard and Wokwi. Port `8883` is shown in the examples below; if EMQX provides a different secure port for your deployment, use that value consistently.
 
 ## Configure the dashboard
 
