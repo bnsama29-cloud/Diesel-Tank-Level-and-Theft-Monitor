@@ -1,18 +1,32 @@
 # Demonstration evidence checklist
 
-Save Wokwi, Adafruit IO, dashboard, and tank-viewer screenshots in this folder after capturing them. Do not include account keys, private feed URLs, or personal Wi-Fi details in screenshots.
+Save Wokwi, Adafruit IO, dashboard, and tank-viewer screenshots under `docs/evidence/`. Do not include account keys, private feed URLs, or personal Wi-Fi details in screenshots.
 
 | Test | Setup | Expected result | Actual |
 | --- | --- | --- | --- |
-| Full tank | Distance 5 cm | 100%, 500 L, pump OFF, FULL LED | Pending |
-| Low tank | Distance 95 cm | 10%, 50 L, pump ON, LOW LED | Pending |
+| Full tank | Distance 5 cm | 100%, 500 L, pump OFF, FULL LED | LCD showed 100%, 500 L: [Wokwi screenshot](./evidence/01-full-tank-wokwi.png). |
+| Low tank | Distance 95 cm | 10%, 50 L, pump ON, LOW LED | LCD showed 9%, 46 L: [Wokwi screenshot](./evidence/02-distance-95cm-observed.png). |
 | Hysteresis hold | Start low, raise to 50% | Pump stays ON | Pending |
 | Hysteresis stop | Raise above 90% | Pump turns OFF | Pending |
-| Medium level | Distance 55 cm | 50%, 250 L, MEDIUM LED | Pending |
-| Generator ON | Switch ON, stable/gradual level | Generator ON, no theft alarm | Pending |
+| Medium level | Distance 55 cm | 50%, 250 L, MEDIUM LED | LCD showed 50%, 248 L: [Wokwi screenshot](./evidence/03-distance-55cm-observed.png). |
+| Generator ON | Switch ON, stable/gradual level | Generator ON, no theft alarm | Pending: the hosted Wokwi diagram reports a short circuit when this switch is toggled; the local wiring is corrected below but has not yet been reloaded into Wokwi. |
 | Theft alarm | Generator OFF, >5 point drop in 60 seconds | `THEFT?`, buzzer, alarm feed ON | Pending |
 | Empty tank | Distance at/above 105 cm | 0%, 0 L, pump ON | Pending |
-| Cloud integration | Run Wokwi with valid private key | Seven Adafruit feeds update | Pending |
+| Cloud integration | Run Wokwi with valid private key | Seven Adafruit feeds update | Wokwi serial monitor returned HTTP 200 for distance, level, litres, generator, pump, theft, and hours-left feeds during this run; the Adafruit feed page was not captured. |
 | Dashboard + tank | Open deployed dashboard | Readings and tank fill follow feeds | Pending |
 
-Suggested filenames: `01_full_tank.png`, `02_low_level_pump_on.png`, `03_pump_hysteresis.png`, `04_medium_level.png`, `05_generator_on.png`, `06_theft_alarm.png`, `07_empty_tank.png`, `08_adafruit_feeds.png`, `09_dashboard_tank.png`.
+Suggested filenames for the remaining live captures: `04-pump-hysteresis-wokwi.png`, `05-generator-on-wokwi.png`, `06-theft-alarm-wokwi.png`, `07-empty-tank-wokwi.png`, `08-adafruit-feeds.png`, and `09-dashboard-tank.png`.
+
+## Generator switch wiring note
+
+The public Wokwi project is separate from the files in this repository. Toggling its generator switch produced Wokwi `Short circuit!` warnings between ESP32 GND and 3V3, so the generator-ON case is not verified. In the local [Wokwi diagram](../firmware/wokwi/diagram.json), the switch common pin (`sw1:2`) now connects to GPIO 12, with the two outer switch pins connected to 3V3 and GND. This lets the input read HIGH or LOW without directly bridging the supply rails. Reload the corrected diagram into the hosted project before testing the generator-ON case.
+
+## Illustrative dashboard graphs
+
+The following report-ready charts are generated example data, not screenshots of a live Wokwi run, Adafruit IO feed, or dashboard session. Use them to explain the expected behavior only; replace them with captured live evidence when the corresponding test is run.
+
+| Example | Chart |
+| --- | --- |
+| Pump turns on at or below 20% and stays on until above 90% | [Pump hysteresis example](./evidence/example-pump-hysteresis.png) |
+| Generator OFF with a rapid level drop that crosses the theft threshold | [Theft drop example](./evidence/example-theft-drop.png) |
+| Generator ON with a gradual decline and illustrative remaining-hours estimate | [Generator consumption example](./evidence/example-generator-consumption.png) |
