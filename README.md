@@ -1,35 +1,101 @@
-# Diesel Tank Level and Theft Monitor
+# ⛽ Diesel Tank Level & Theft Monitor — Python Dashboard
 
-Browser-first starter for the Wokwi ESP32, Adafruit IO, Python dashboard, and tank visualization. The project is divided so each teammate can work in a separate folder and use the shared data contract in [`integration/README.md`](integration/README.md).
+A real-time monitoring dashboard for diesel tank level tracking, pump hysteresis control, and **ML-based theft detection**. Built with Streamlit, scikit-learn, and Plotly.
 
-## Project folders
+## 🏗️ Architecture
 
-| Folder | Owner | Contents |
-| --- | --- | --- |
-| [`person1-esp32/`](person1-esp32/) | Person 1 | Wokwi circuit, ESP32 firmware, pin map, cloud setup |
-| [`person2-dashboard-ml/`](person2-dashboard-ml/) | Person 2 | Streamlit dashboard, cloud feed reader, theft trend rule |
-| [`person3-3d-tank/`](person3-3d-tank/) | Person 3 | Browser tank viewer, ready for the Onshape model |
-| [`integration/`](integration/) | Everyone | Shared Adafruit IO feed names and integration checklist |
-| [`report-evidence/`](report-evidence/) | Everyone | Screenshot and test-results checklist |
+```
+ESP32 / Wokwi ──WebSocket/MQTT──▶ bridge.py ──▶ tank_model.py ──▶ ml_detector.py
+                                                                        │
+                                                                        ▼
+                simulator.py (offline testing) ──────────────▶     app.py (Dashboard)
+```
 
-## Free browser workflow
+## 📦 Setup
 
-1. Open the Wokwi project and save the firmware and circuit files from `person1-esp32/`.
-2. Create or use the seven Adafruit IO feeds listed in the integration guide.
-3. Put the new Adafruit IO key in Wokwi's private `secrets.h` and Streamlit's app secrets. Never commit either secrets file.
-4. Person 2 deploys `person2-dashboard-ml/` from this GitHub repository to Streamlit Community Cloud.
-5. Person 3 replaces the starter tank drawing with the exported Onshape GLB/GLTF asset when ready.
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
 
-No local software is required for the intended workflow: edit the repository with GitHub's web editor, run the circuit in Wokwi, edit the model in Onshape, and host the dashboard with Streamlit Community Cloud. Python tests are optional and can be run in a browser-based development environment.
+# 2. Train the ML model (generates synthetic data + trains Isolation Forest + Gradient Boosting)
+python train_model.py
 
-## Safety and current status
+# 3. Launch the dashboard
+streamlit run app.py
+```
 
-- The Adafruit key and Wi-Fi password pasted into the original project chat are considered exposed. Revoke/regenerate the Adafruit IO key and change the Wi-Fi password before using those accounts again.
-- This repository intentionally contains no usable credentials. `person1-esp32/secrets.h.example` is a template; create the ignored `secrets.h` privately in Wokwi.
-- Pump output in Wokwi is a simulated relay signal. Do not connect a real pump or mains voltage without a properly rated, isolated driver and qualified supervision.
-- The core level conversion and pump hysteresis are implemented. Cloud publishing and dashboard polling require the team's newly generated private Adafruit IO key and should be validated in Wokwi before marking integration tests as passed.
-- The dashboard currently uses the required explainable rapid-drop threshold. It is not a trained ML model; collect labeled samples before claiming machine-learning classification.
+## 🎬 Demo Test Cases
 
-## First team milestone
+| # | Scenario | What to Expect |
+|---|----------|----------------|
+| 1 | **Hysteresis Demo** | Level sweeps Full→Empty→Full. Pump turns ON at 20%, OFF at 90% (hysteresis). |
+| 2 | **Theft Demo** | Generator OFF, level drops 20% in 20s. ML detects theft, flashing red alert + buzzer. |
+| 3 | **Consumption Demo** | Generator ON, steady 0.5%/s drain. Dashboard shows **hours remaining** countdown. |
 
-Have Person 1 verify the local Wokwi tests, then publish to all seven Adafruit feeds. Have Person 2 confirm the same latest readings on the dashboard, and Person 3 confirm that the tank fill follows `level`. Record actual results and screenshots in [`report-evidence/README.md`](report-evidence/README.md).
+Click the scenario buttons on the dashboard to run each demo.
+
+## 🧠 ML Theft Detection
+
+Instead of a rigid "5% drop in 1 minute" rule, we use an **ensemble ML model**:
+
+- **Isolation Forest** — unsupervised anomaly detection (catches novel theft patterns)
+- **Gradient Boosting Classifier** — supervised classifier (high accuracy on known patterns)
+
+### Features Used
+| Feature | Description |
+|---------|-------------|
+| `rate_of_change` | Level change per second (30s window) |
+| `rate_of_change_10s` | Level change per second (10s window) |
+| `rolling_std` | Standard deviation of level readings |
+| `drop_magnitude` | Max drop from peak in window |
+| `generator_state` | Generator ON (1) or OFF (0) |
+| `level_current` | Current level percentage |
+| `acceleration` | Rate-of-change of rate-of-change |
+| `drop_sharpness` | Ratio of short-term to long-term drop rate |
+
+### Why ML > Fixed Rules?
+- Adapts to different theft speeds and patterns
+- Reduces false alarms from sensor noise
+- Provides **confidence scores** instead of binary alerts
+- Can distinguish consumption (gen ON) from theft (gen OFF) contextually
+
+## 🔌 Connecting to Wokwi
+
+1. Your friend's ESP32 should broadcast JSON via WebSocket:
+   ```json
+   { "distance_cm": 45.2, "generator_on": false, "pump_on": true }
+   ```
+2. In the dashboard sidebar, select **WebSocket (Wokwi)**
+3. Enter the WebSocket URL (default: `ws://localhost:4000`)
+4. Click **🔌 Connect WebSocket**
+
+MQTT is also supported with topic `diesel/sensor`.
+
+## 📁 Project Structure
+
+```
+├── app.py              # Streamlit dashboard (main entry point)
+├── bridge.py           # WebSocket/MQTT data ingestion
+├── tank_model.py       # Tank physics & calculations
+├── ml_detector.py      # ML anomaly detection (IF + GB ensemble)
+├── simulator.py        # Test scenario generator
+├── train_model.py      # Synthetic data generation & model training
+├── models/
+│   └── theft_detector.joblib  # Trained ML model
+├── requirements.txt
+└── README.md
+```
+
+## 🔧 Tank Configuration
+
+Default: **100 cm deep, 500 L cylindrical tank**
+
+Adjustable in the dashboard sidebar:
+- Tank depth (cm)
+- Tank capacity (L)
+- Pump ON threshold (20%)
+- Pump OFF threshold (90%)
+
+## License
+
+Academic project — Skill Lab EL
