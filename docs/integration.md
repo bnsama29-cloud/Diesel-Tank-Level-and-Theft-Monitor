@@ -39,7 +39,7 @@ Save the secrets and reboot the app if it does not restart automatically. Do not
 
 1. Make the Wokwi project private before entering a real AIO key. Do not put live keys in a public sketch.
 2. Copy `firmware/wokwi/sketch.ino` and the corrected `firmware/wokwi/diagram.json` into the hosted Wokwi project. Git pushes do not update Wokwi.
-3. Add a private `secrets.h` based on `firmware/wokwi/secrets.h.example`. Set `AIO_USERNAME` and `AIO_KEY` to the same values used in Streamlit. `AIO_FEED_KEY` defaults to `tank-telemetry` in the sketch; define it in `secrets.h` only if your Adafruit IO feed key differs.
+3. Add a private `secrets.h` based on `firmware/wokwi/secrets.h.example`. Set `AIO_USERNAME` and `AIO_KEY` to the same values used in Streamlit. The firmware writes to the fixed `tank-telemetry` feed; if you choose another feed key, change that path in `sketch.ino` and set the matching `AIO_FEED_KEY` in Streamlit.
 4. Put the trusted root CA for `io.adafruit.com` in `AIO_ROOT_CA`. Keep TLS verification enabled; do not replace it with an insecure TLS bypass.
 5. Ensure the `LiquidCrystal I2C` library in `firmware/wokwi/libraries.txt` is installed.
 6. Start the simulation. In the Serial Monitor, expect `Wokwi Wi-Fi connected.` and `Adafruit IO telemetry: HTTP 200` every 3 seconds.

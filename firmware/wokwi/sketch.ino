@@ -6,10 +6,6 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-#ifndef AIO_FEED_KEY
-#define AIO_FEED_KEY "tank-telemetry"
-#endif
-
 // =====================================================
 // 1. ESP32-S2-MINI-1 PIN CONFIGURATION
 // =====================================================
@@ -300,7 +296,7 @@ void publishTelemetry() {
   networkClient.setCACert(AIO_ROOT_CA);
   HTTPClient https;
   const String url = String("https://") + AIO_HOST + "/api/v2/" +
-                     AIO_USERNAME + "/feeds/" + AIO_FEED_KEY + "/data";
+                     AIO_USERNAME + "/feeds/tank-telemetry/data";
   https.setTimeout(5000);
   if (!https.begin(networkClient, url)) {
     Serial.println("Could not initialize Adafruit IO HTTPS request.");
