@@ -6,7 +6,7 @@ Deploy `dashboard/app.py` on Streamlit Community Cloud and configure `AIO_USERNA
 
 Adafruit IO remains the hidden network bridge between Wokwi and the hosted website. Wokwi polls the `command` feed every 10 seconds while the website refreshes metrics every 20 seconds. Create the command feed along with the telemetry feeds. Dashboard remote inputs change the firmware's simulated sensor/switch readings but cannot move the Wokwi component graphics; use the embedded Wokwi controls for changes that should visibly move the circuit controls. A physical Wokwi sensor or switch change takes control back.
 
-The 3D view loads the Three.js ES module from jsDelivr when the page opens. The browser renders the diesel chamber as a rotatable 3D scene and sets the liquid volume from the live level/litre readings. The mobile viewer supports touch-drag rotation.
+The 3D view embeds the team's `diesel-tank.gltf` Onshape export directly into the dashboard component. Three.js and its glTF loader render it as a rotatable 3D scene, with liquid height driven by live level/litre readings. The mobile viewer supports touch-drag rotation.
 
 ## Offline simulator and ML demonstration
 

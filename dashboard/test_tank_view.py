@@ -23,6 +23,18 @@ class TankViewTests(unittest.TestCase):
             html = build_tank_html(template_path, 120, -10)
         self.assertEqual(html, "100.0|0.0")
 
+    def test_embeds_team_gltf_model_for_component_rendering(self):
+        with tempfile.TemporaryDirectory() as folder:
+            template_path = Path(folder) / "tank.html"
+            model_path = Path(folder) / "tank.gltf"
+            template_path.write_text("__TANK_MODEL_BASE64__", encoding="utf-8")
+            model_path.write_bytes(b'{"asset":{"version":"2.0"}}')
+            html = build_tank_html(template_path, 50, 250, model_path)
+        self.assertEqual(
+            html,
+            "eyJhc3NldCI6eyJ2ZXJzaW9uIjoiMi4wIn19",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

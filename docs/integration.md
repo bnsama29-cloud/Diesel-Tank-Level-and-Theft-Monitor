@@ -81,3 +81,5 @@ Adafruit IO can show graphs without deploying the Python dashboard:
 5. Save the dashboard and keep the Wokwi simulation running to produce graph data.
 
 The website provides a live Plotly graph, system status, and an interactive WebGL tank that follows the reported level. Its mobile URL is read-only; use the default desktop URL for simulation controls.
+
+The live visualization uses the Onshape-exported `diesel-tank.gltf` at the repository root. The dashboard embeds the model data into the viewer component, so it does not need a separate asset host.

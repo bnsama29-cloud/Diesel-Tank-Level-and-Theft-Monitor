@@ -38,8 +38,10 @@ WOKWI_EMBED_URL = "https://wokwi.com/projects/478875514435866625?embed=1"
 
 
 def render_tank(level: float, litres: float) -> None:
-    template_path = Path(__file__).parent / "assets" / "tank_viewer.html"
-    html = build_tank_html(template_path, level, litres)
+    dashboard_path = Path(__file__).parent
+    template_path = dashboard_path / "assets" / "tank_viewer.html"
+    model_path = dashboard_path.parent / "diesel-tank.gltf"
+    html = build_tank_html(template_path, level, litres, model_path)
     components.html(html, height=390, scrolling=False)
 
 

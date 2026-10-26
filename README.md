@@ -10,6 +10,7 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 - Reads the generator slide switch and detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
 - Publishes seven telemetry values over HTTPS from Wokwi through Adafruit IO as the cloud relay.
 - Displays live readings, history, status, and an interactive WebGL 3D chamber in a Streamlit website. The desktop view embeds the Wokwi simulation and controls virtual sensor/generator inputs; a mobile URL is read-only.
+- Renders the team's Onshape-exported `diesel-tank.gltf` model in the live 3D view, with the fuel surface driven by the reported tank level.
 
 ## Repository layout
 
@@ -21,6 +22,7 @@ dashboard/
   simulator_app.py       Offline scenario and ML demonstration dashboard
   assets/                Tank visualization embedded by the live dashboard
   models/                Trained demo model artifact
+diesel-tank.gltf         Onshape-exported 3D chamber used by the live dashboard
   ...                    Dashboard logic, simulators, tests, and model training
 docs/
   integration.md         Adafruit feed contract and cloud setup
