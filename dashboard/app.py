@@ -90,7 +90,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.title("⛽ Diesel Tank Monitor")
-mobile_view = st.experimental_get_query_params().get("view", ["desktop"])[0] == "mobile"
+mobile_view = st.query_params.get("view", "desktop") == "mobile"
 st.markdown(
     '<div class="hero-note">'
     + ("Read-only live monitor" if mobile_view else "Live control room")
