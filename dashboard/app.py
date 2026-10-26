@@ -3,15 +3,11 @@ from pathlib import Path
 import time
 
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-from adafruit_client import (
-    fetch_latest_feed,
-    fetch_level_history,
-)
 from monitor_logic import detect_rapid_drop
+from mqtt_telemetry import MQTTTelemetryStore
 from tank_view import build_tank_html
 from telemetry import display_level, display_litres
 from wokwi_embed import build_wokwi_embed_html
@@ -26,11 +22,11 @@ FEEDS = {
     "theft": "Firmware alarm",
     "hours-left": "Hours left",
 }
-POLL_INTERVAL_SECONDS = 20
+POLL_INTERVAL_SECONDS = 2
 THEFT_WINDOW_SECONDS = 60
 THEFT_DROP_PERCENT = 5.0
 TANK_CAPACITY_LITRES = 500.0
-HISTORY_LIMIT = 500
+STALE_AFTER_SECONDS = 8
 
 
 def append_event(message: str) -> None:
@@ -52,47 +48,72 @@ def render_tank(level: float, litres: float) -> None:
     components.html(html, height=390, scrolling=False)
 
 
-def load_telemetry(username: str, aio_key: str):
-    readings = {
-        feed: fetch_latest_feed(username, aio_key, feed)
-        for feed in FEEDS
-    }
-    history = fetch_level_history(username, aio_key, limit=HISTORY_LIMIT)
-    return readings, history
+@st.cache_resource
+def connect_mqtt(
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    topic: str,
+) -> MQTTTelemetryStore:
+    store = MQTTTelemetryStore(host, port, username, password, topic)
+    store.start()
+    return store
 
 
 @st.fragment(run_every=POLL_INTERVAL_SECONDS)
-def render_live_panel(username: str, aio_key: str) -> None:
-    try:
-        readings, level_history = load_telemetry(username, aio_key)
-    except (requests.RequestException, ValueError) as exc:
+def render_live_panel(store: MQTTTelemetryStore) -> None:
+    latest = store.get_latest()
+    level_history = [
+        {
+            "timestamp": reading["timestamp"],
+            "level": reading["level_percent"],
+        }
+        for reading in store.get_history()
+    ]
+    if latest is None:
         status_column, records_column = st.columns([0.95, 1.05], gap="medium")
-        error_message = str(exc)
+        error_message = store.last_error
         if st.session_state.get("last_telemetry_error") != error_message:
-            append_event(f"Telemetry read failed: {error_message}")
+            if error_message:
+                append_event(f"MQTT telemetry error: {error_message}")
             st.session_state.last_telemetry_error = error_message
         with status_column:
             st.error(
-                f"Could not load live telemetry. Check the Wokwi connection and feeds. "
-                f"Details: {exc}"
+                "Waiting for MQTT telemetry. Check that Wokwi is running and "
+                "that broker settings and topic match."
             )
             st.caption(
-                "Wokwi remains running; this panel will retry automatically."
+                "The dashboard will update as soon as a retained or new message arrives."
             )
         with records_column:
+            if error_message:
+                st.warning(error_message)
             st.subheader("Recent activity")
             render_event_log()
         return
 
     if st.session_state.pop("last_telemetry_error", None):
-        append_event("Telemetry connection restored.")
+        append_event("MQTT telemetry connection restored.")
 
+    source_timestamp = latest["timestamp"]
+    readings = {
+        "distance": (latest["distance_cm"], source_timestamp),
+        "level": (latest["level_percent"], source_timestamp),
+        "litres": (latest["litres"], source_timestamp),
+        "generator": (float(latest["generator_on"]), source_timestamp),
+        "pump": (float(latest["pump_on"]), source_timestamp),
+        "theft": (float(latest["theft_alarm"]), source_timestamp),
+        "hours-left": (
+            -1.0 if latest["hours_left"] is None else latest["hours_left"],
+            source_timestamp,
+        ),
+    }
     values = {feed: data[0] for feed, data in readings.items()}
-    latest_timestamp = max(data[1] for data in readings.values())
     age_seconds = max(
-        0, int((datetime.now(timezone.utc) - latest_timestamp).total_seconds())
+        0, int((datetime.now(timezone.utc) - source_timestamp).total_seconds())
     )
-    connected = age_seconds < 90
+    connected = store.is_connected and age_seconds < STALE_AFTER_SECONDS
 
     distance = values["distance"]
     raw_level = values["level"]
@@ -102,9 +123,9 @@ def render_live_panel(username: str, aio_key: str) -> None:
     safe_level = 0.0 if level is None else level
     safe_litres = 0.0 if litres is None else litres
 
-    generator_on = values["generator"] >= 0.5
-    pump_on = values["pump"] >= 0.5
-    firmware_alarm = values["theft"] >= 0.5
+    generator_on = latest["generator_on"]
+    pump_on = latest["pump_on"]
+    firmware_alarm = latest["theft_alarm"]
     level_status = (
         "INVALID"
         if level is None
@@ -115,7 +136,7 @@ def render_live_panel(username: str, aio_key: str) -> None:
         else "MEDIUM"
     )
 
-    sample_time = readings["level"][1].timestamp()
+    sample_time = source_timestamp.timestamp()
     previous_sample_time = st.session_state.get("last_logged_sample_time")
     if previous_sample_time != sample_time:
         if previous_sample_time is None:
@@ -192,7 +213,7 @@ def render_live_panel(username: str, aio_key: str) -> None:
         st.subheader("Live status")
         st.caption(
             f"{'🟢 LIVE' if connected else '⚪ STALE'} · "
-            f"Updated {age_seconds}s ago · refreshes every 20s"
+            f"Updated {age_seconds}s ago · dashboard refreshes every 2s"
         )
         level_label = f"{level:.1f}%" if level is not None else "INVALID"
         litres_label = f"{litres:.1f} L" if litres is not None else "INVALID"
@@ -209,7 +230,7 @@ def render_live_panel(username: str, aio_key: str) -> None:
 
         if invalid_level:
             st.warning(
-                f"Adafruit returned level={raw_level:g}, outside the valid 0–100% range. "
+                f"MQTT level={raw_level:g} is outside the valid 0–100% range. "
                 + (
                     f"Showing {safe_level:.1f}% calculated from sensor distance."
                     if level is not None
@@ -218,7 +239,7 @@ def render_live_panel(username: str, aio_key: str) -> None:
             )
         if invalid_litres:
             st.warning(
-                f"Adafruit returned litres={raw_litres:g}, outside the valid 0–500 L range. "
+                f"MQTT litres={raw_litres:g} is outside the valid 0–500 L range. "
                 + (
                     f"Showing {safe_litres:.1f} L calculated from level."
                     if litres is not None
@@ -242,23 +263,31 @@ def render_live_panel(username: str, aio_key: str) -> None:
         st.write(f"**Pump relay:** {'🟢 ON' if pump_on else '⚪ OFF'}")
         st.write(f"**Alarm:** {'🔴 THEFT?' if alarm else '🟢 Clear'}")
 
-        hours_left = values["hours-left"]
+        hours_left = latest["hours_left"]
         st.subheader("Consumption estimate")
         st.write(
             "**Estimated hours left:** "
-            + (f"{hours_left:.1f} h" if hours_left >= 0 else "Not available yet")
+            + (
+                f"{hours_left:.1f} h"
+                if hours_left is not None and hours_left >= 0
+                else "Not available yet"
+            )
         )
         st.caption(
             "The firmware estimates consumption only after it has a usable trend."
         )
 
     with records_column:
-        st.subheader("Live feed records")
+        st.subheader("Latest MQTT telemetry")
         st.dataframe(
             [
                 {
                     "Feed": FEEDS[feed],
-                    "Value": f"{readings[feed][0]:.2f}",
+                    "Value": (
+                        "Not available"
+                        if feed == "hours-left" and hours_left is None
+                        else f"{readings[feed][0]:.2f}"
+                    ),
                     "Updated": readings[feed][1]
                     .astimezone()
                     .strftime("%H:%M:%S"),
@@ -305,8 +334,7 @@ def render_live_panel(username: str, aio_key: str) -> None:
                     fig, use_container_width=True, config={"displayModeBar": False}
                 )
                 st.caption(
-                    f"Showing {len(visible_history)} valid readings; "
-                    f"{len(level_history) - len(valid_history)} invalid readings excluded."
+                    f"Showing {len(visible_history)} valid readings held in memory."
                 )
             else:
                 st.info("Not enough readings in this time range to draw the graph.")
@@ -432,21 +460,36 @@ st.markdown(
 )
 
 try:
-    username = st.secrets["AIO_USERNAME"]
-    aio_key = st.secrets["AIO_KEY"]
-except (KeyError, FileNotFoundError):
+    mqtt_host = st.secrets["MQTT_HOST"]
+    mqtt_port = int(st.secrets.get("MQTT_PORT", 8883))
+    mqtt_username = st.secrets["MQTT_USERNAME"]
+    mqtt_password = st.secrets["MQTT_PASSWORD"]
+    mqtt_topic = st.secrets.get("MQTT_TOPIC", "diesel-tank/telemetry")
+except (KeyError, FileNotFoundError, ValueError):
     st.error(
-        "Adafruit IO credentials are not configured. Add AIO_USERNAME and AIO_KEY "
-        "in Streamlit Community Cloud → App settings → Secrets."
+        "MQTT broker settings are not configured. Add MQTT_HOST, MQTT_USERNAME, "
+        "and MQTT_PASSWORD in Streamlit Community Cloud → App settings → Secrets."
     )
     st.stop()
 
+try:
+    telemetry_store = connect_mqtt(
+        mqtt_host,
+        mqtt_port,
+        mqtt_username,
+        mqtt_password,
+        mqtt_topic,
+    )
+except (OSError, ValueError) as exc:
+    st.error(f"Could not initialize the MQTT telemetry client: {exc}")
+    st.stop()
+
 if mobile_view:
-    render_live_panel(username, aio_key)
+    render_live_panel(telemetry_store)
 else:
     dashboard_column, simulation_column = st.columns([2.0, 1.0], gap="large")
     with dashboard_column:
-        render_live_panel(username, aio_key)
+        render_live_panel(telemetry_store)
     with simulation_column:
         st.subheader("Wokwi simulation")
         st.caption(

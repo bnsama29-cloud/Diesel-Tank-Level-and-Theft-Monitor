@@ -1,7 +1,7 @@
 #include "secrets.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <HTTPClient.h>
+#include <PubSubClient.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -50,28 +50,27 @@ bool physicalGeneratorOn = false;
 
 // =====================================================
 // 5. TIMING AND CLOUD SETTINGS
-// Seven telemetry feeds every 20 seconds = 21 data points/minute.
 // =====================================================
 const unsigned long LCD_INTERVAL_MS = 500UL;
-const unsigned long CLOUD_PUBLISH_MS = 20000UL;
+const unsigned long CLOUD_PUBLISH_MS = 2000UL;
 const bool ENABLE_CLOUD = true;
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
-const char* AIO_HOST = "io.adafruit.com";
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+WiFiClientSecure mqttNetworkClient;
+PubSubClient mqttClient(mqttNetworkClient);
 float distanceCm = -1.0f;
 float levelPct = 0.0f;
 float litres = 0.0f;
 bool sensorOK = false;
 bool pumpOn = false;
+unsigned long lastMqttReconnect = 0;
 
 int relayLevel(bool on) {
   if (RELAY_ACTIVE_LOW) return on ? LOW : HIGH;
   return on ? HIGH : LOW;
 }
-
-bool publishFeedValue(const char* feedKey, const String& value);
 
 float readDistanceCm() {
   digitalWrite(TRIG_PIN, LOW);
@@ -217,44 +216,53 @@ void connectWiFi() {
                      : "Wi-Fi unavailable; local monitoring continues.");
 }
 
-bool publishFeedValue(const char* feedKey, const String& value) {
-  WiFiClientSecure client;
-  client.setCACert(AIO_ROOT_CA);
-  HTTPClient https;
-  const String url = String("https://") + AIO_HOST + "/api/v2/" +
-                     AIO_USERNAME + "/feeds/" + feedKey + "/data";
-  https.setTimeout(5000);
-  if (!https.begin(client, url)) {
-    Serial.printf("HTTPS setup failed for feed %s\n", feedKey);
-    return false;
+void maintainMqttConnection() {
+  if (!ENABLE_CLOUD || WiFi.status() != WL_CONNECTED || mqttClient.connected()) return;
+
+  const unsigned long now = millis();
+  if (now - lastMqttReconnect < 5000UL) return;
+  lastMqttReconnect = now;
+
+  time_t currentTime;
+  time(&currentTime);
+  if (currentTime < 1700000000) {
+    Serial.println("Waiting for network time before MQTT TLS.");
+    return;
   }
 
-  https.addHeader("X-AIO-Key", AIO_KEY);
-  https.addHeader("Content-Type", "application/json");
-  const String payload = "{\"value\":\"" + value + "\"}";
-  const int status = https.POST(payload);
-  Serial.printf("Adafruit feed %s: HTTP %d\n", feedKey, status);
-  if (status < 200 || status >= 300) Serial.println(https.getString());
-  https.end();
-  return status >= 200 && status < 300;
+  char clientId[32];
+  snprintf(clientId, sizeof(clientId), "diesel-%08llx",
+           (unsigned long long)ESP.getEfuseMac());
+  if (mqttClient.connect(clientId, MQTT_USERNAME, MQTT_PASSWORD)) {
+    Serial.println("MQTT broker connected.");
+  } else {
+    Serial.printf("MQTT connection failed, state=%d\n", mqttClient.state());
+  }
 }
 
 void publishTelemetry() {
-  if (!ENABLE_CLOUD || WiFi.status() != WL_CONNECTED || !sensorOK) return;
+  if (!ENABLE_CLOUD || !mqttClient.connected() || !sensorOK) return;
   const unsigned long now = millis();
   if (now - lastCloudPublish < CLOUD_PUBLISH_MS) return;
   lastCloudPublish = now;
 
-  bool allOK = true;
-  allOK &= publishFeedValue("distance", String(distanceCm, 2));
-  allOK &= publishFeedValue("level", String(levelPct, 2));
-  allOK &= publishFeedValue("litres", String(litres, 2));
-  allOK &= publishFeedValue("generator", String(generatorOn ? 1 : 0));
-  allOK &= publishFeedValue("pump", String(pumpOn ? 1 : 0));
-  allOK &= publishFeedValue("theft", String(localTheftAlarm ? 1 : 0));
-  allOK &= publishFeedValue("hours-left", String(estimateHoursLeft(), 2));
-  Serial.println(allOK ? "Adafruit IO publish cycle succeeded."
-                       : "Adafruit IO publish cycle had errors.");
+  char payload[256];
+  const float hoursLeft = estimateHoursLeft();
+  time_t currentTime;
+  time(&currentTime);
+  snprintf(payload, sizeof(payload),
+           "{\"timestamp\":%lu,\"distance_cm\":%.2f,"
+           "\"level_percent\":%.2f,\"litres\":%.2f,"
+           "\"generator_on\":%s,\"pump_on\":%s,\"theft_alarm\":%s,"
+           "\"hours_left\":%.2f}",
+           (unsigned long)currentTime, distanceCm, levelPct, litres,
+           generatorOn ? "true" : "false",
+           pumpOn ? "true" : "false",
+           localTheftAlarm ? "true" : "false",
+           hoursLeft);
+  const bool published = mqttClient.publish(MQTT_TOPIC, payload, true);
+  Serial.println(published ? "MQTT telemetry published."
+                           : "MQTT telemetry publish failed.");
 }
 
 void setup() {
@@ -276,7 +284,15 @@ void setup() {
   lcd.backlight();
   lcd.setCursor(0, 0); lcd.print("Tank Monitor");
   lcd.setCursor(0, 1); lcd.print("Starting...");
+  mqttNetworkClient.setCACert(MQTT_ROOT_CA);
+  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+  mqttClient.setKeepAlive(30);
+  mqttClient.setBufferSize(512);
+  mqttClient.setSocketTimeout(2);
   connectWiFi();
+  if (WiFi.status() == WL_CONNECTED) {
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+  }
   lcd.clear();
   Serial.println("Diesel tank monitor started.");
 }
@@ -297,6 +313,8 @@ void loop() {
 
   updateLCD();
   updateBuzzer();
+  maintainMqttConnection();
+  mqttClient.loop();
   publishTelemetry();
   delay(50);
 }

@@ -1,6 +1,6 @@
 # Demonstration evidence checklist
 
-Save Wokwi, Adafruit IO, dashboard, and tank-viewer screenshots under `docs/evidence/`. Do not include account keys, private feed URLs, or personal Wi-Fi details in screenshots.
+Save Wokwi, MQTT broker, dashboard, and tank-viewer screenshots under `docs/evidence/`. Do not include broker credentials or personal Wi-Fi details in screenshots.
 
 | Test | Setup | Expected result | Actual |
 | --- | --- | --- | --- |
@@ -9,10 +9,10 @@ Save Wokwi, Adafruit IO, dashboard, and tank-viewer screenshots under `docs/evid
 | Hysteresis hold | Start low, raise to 50% | Pump stays ON | Pending |
 | Hysteresis stop | Raise above 90% | Pump turns OFF | Pending |
 | Medium level | Distance 55 cm | 50%, 250 L, MEDIUM LED | LCD showed 50%, 248 L: [Wokwi screenshot](./evidence/03-distance-55cm-observed.png). |
-| Generator ON | Switch ON, stable/gradual level | Generator ON, no theft alarm | Pending: the hosted Wokwi diagram reports a short circuit when this switch is toggled; the local wiring is corrected below but has not yet been reloaded into Wokwi. |
+| Generator ON | Switch ON, stable/gradual level | Generator ON, no theft alarm | Pending: the corrected local wiring below still needs to be reloaded into the hosted Wokwi project and verified. |
 | Theft alarm | Generator OFF, >5 point drop in 60 seconds | `THEFT?`, buzzer, alarm feed ON | Pending |
 | Empty tank | Distance at/above 105 cm | 0%, 0 L, pump ON | Pending |
-| Cloud integration | Run Wokwi with valid private key | Seven Adafruit feeds update | Wokwi serial monitor returned HTTP 200 for distance, level, litres, generator, pump, theft, and hours-left feeds during this run; the Adafruit feed page was not captured. |
+| Cloud integration | Wokwi publishes MQTT telemetry to the configured cloud broker | Dashboard receives messages within a few seconds | Pending: previous HTTP 200 screenshots were from the retired Adafruit path and do not verify the current MQTT setup. |
 | Dashboard + tank | Open deployed dashboard | Readings and tank fill follow feeds | Pending |
 
 Suggested filenames for the remaining live captures: `04-pump-hysteresis-wokwi.png`, `05-generator-on-wokwi.png`, `06-theft-alarm-wokwi.png`, `07-empty-tank-wokwi.png`, `08-adafruit-feeds.png`, and `09-dashboard-tank.png`.
@@ -23,7 +23,7 @@ The public Wokwi project is separate from the files in this repository. Toggling
 
 ## Illustrative dashboard graphs
 
-The following report-ready charts are generated example data, not screenshots of a live Wokwi run, Adafruit IO feed, or dashboard session. Use them to explain the expected behavior only; replace them with captured live evidence when the corresponding test is run.
+The following report-ready charts are generated example data, not screenshots of a live Wokwi run, cloud broker, or dashboard session. Use them to explain the expected behavior only; replace them with captured live evidence when the corresponding test is run.
 
 | Example | Chart |
 | --- | --- |

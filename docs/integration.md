@@ -1,82 +1,88 @@
-# Shared integration contract
+# Live MQTT integration
 
-Adafruit IO is the background telemetry relay between Wokwi and the hosted website. The desktop dashboard embeds the public Wokwi project; start and operate the simulation there. Wokwi publishes telemetry and the website reads it. A mobile URL provides the same live readings, graph, and 3D tank in read-only mode, without embedding Wokwi. Viewers do not need to open the Adafruit IO dashboard.
+## Architecture
 
-The desktop layout keeps live status and the 3D model on the left, live feed records and the graph in the middle, and the Wokwi simulator on the right. Drag the simulation's lower-right corner to resize it, or use browser fullscreen. Telemetry refreshes in a Streamlit fragment every 20 seconds so it does not restart the embedded simulation.
-
-## Feeds
-
-Create these seven Adafruit IO telemetry feeds with the exact lowercase keys:
-
-| Feed key | Type / example | Meaning |
-| --- | --- | --- |
-| `distance` | number, `55.0` | Sensor-to-fuel distance in cm |
-| `level` | number, `50.0` | Tank full percentage, 0–100 |
-| `litres` | number, `250.0` | Estimated fuel volume, 0–500 |
-| `generator` | integer, `0` or `1` | Generator OFF / ON |
-| `pump` | integer, `0` or `1` | Pump relay OFF / ON |
-| `theft` | integer, `0` or `1` | Latched firmware theft alarm |
-| `hours-left` | number, `-1` or hours | `-1` means unavailable |
-The firmware posts each telemetry feed once per 20-second cycle (up to 21 data points/minute). There is no dashboard command feed: sensor and generator inputs are controlled in Wokwi.
-
-The public Wokwi project is hosted separately from this Git repository. If its sketch still contains the old command polling code, replace it with `firmware/wokwi/sketch.ino` in the Wokwi editor and save the project; a Git push does not change the hosted simulation.
-
-Use `?view=mobile` on the deployed website URL for the mobile read-only page. The default URL is the desktop monitor with the embedded Wokwi simulation.
-
-## Data shape
-
-The current firmware writes one value to each feed using Adafruit IO's data endpoint, e.g.:
-
-```json
-{"value":"50.00"}
+```text
+Wokwi ESP32 -- MQTT over TLS (one retained JSON message every 2 seconds) --> HiveMQ Cloud
+                                                                               |
+                                                              MQTT subscription over TLS
+                                                                               v
+                                                        Streamlit desktop + mobile dashboard
 ```
 
-The dashboard combines the latest feed values into a common record:
+Adafruit IO is no longer part of the live path. The dashboard subscribes to the same cloud MQTT topic as the ESP32 publishes to. The Wokwi circuit remains the only simulation control surface; `?view=mobile` is read-only.
+
+The firmware publishes every 2 seconds and the Streamlit fragment redraws every 2 seconds. Typical display latency should be a few seconds, depending on Wokwi, broker, network, and browser scheduling. The dashboard marks telemetry stale after 8 seconds. MQTT messages are retained so a dashboard that connects after the simulator can receive its latest state. The dashboard keeps up to 3,600 readings in process memory; this chart history resets if the Streamlit app restarts and is not a permanent database.
+
+## Create a free broker
+
+This configuration targets a HiveMQ Cloud serverless cluster:
+
+1. Create a free HiveMQ Cloud account and a serverless cluster.
+2. Copy the cluster hostname (hostname only, without `mqtts://`), TLS MQTT port `8883`, and create a username/password in the cluster's access management.
+3. Permit that username to publish and subscribe to `diesel-tank/telemetry` (or configure another single topic consistently on both ends).
+4. Obtain the broker's trusted root CA PEM from its TLS/certificate documentation. Do not disable certificate verification.
+
+The free broker tier is subject to the provider's current usage and connection limits; check its current plan before a long demonstration.
+
+## Configure the dashboard
+
+Deploy `dashboard/app.py` to Streamlit Community Cloud. Under **App settings → Secrets**, add:
+
+```toml
+MQTT_HOST = "your-cluster-hostname"
+MQTT_PORT = 8883
+MQTT_USERNAME = "your_mqtt_username"
+MQTT_PASSWORD = "your_private_mqtt_password"
+MQTT_TOPIC = "diesel-tank/telemetry"
+```
+
+The Streamlit MQTT client uses TLS and the Python runtime's trusted CA store to verify the broker certificate. Do not commit broker credentials.
+
+## Configure Wokwi
+
+1. Copy `firmware/wokwi/secrets.h.example` into a private `secrets.h` file in the Wokwi project.
+2. Set `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, and `MQTT_TOPIC` to the same broker settings as the dashboard. Paste the broker's trusted root CA PEM into `MQTT_ROOT_CA`.
+3. Add the `PubSubClient` library listed in `firmware/wokwi/libraries.txt` if Wokwi does not add it automatically.
+4. Copy `firmware/wokwi/sketch.ino` into the hosted Wokwi sketch and save. Git pushes do not update the hosted Wokwi project.
+5. Reload `firmware/wokwi/diagram.json` too. Its generator switch common pin is wired to GPIO 12; the earlier hosted diagram connected the switch in a way that caused a short-circuit warning.
+6. Start the simulation. In the Serial Monitor, expect `Wokwi Wi-Fi connected.`, `MQTT broker connected.`, then `MQTT telemetry published.` at about 2-second intervals.
+
+Keep `secrets.h` private and never paste the broker username/password or CA-containing secrets file into a public sketch or GitHub.
+
+## Telemetry message
+
+The ESP32 publishes one JSON object per sample to `diesel-tank/telemetry`:
 
 ```json
 {
+  "timestamp": 1793010000,
   "distance_cm": 55.0,
   "level_percent": 50.0,
   "litres": 250.0,
   "generator_on": false,
   "pump_on": false,
   "theft_alarm": false,
-  "hours_left": null
+  "hours_left": -1.0
 }
 ```
 
-## Access and secrets
+`hours_left: -1` means no usable consumption estimate is available yet. The dashboard shows that as “Not available yet”.
 
-- ESP32 writes require `AIO_USERNAME` and a newly generated `AIO_KEY` in a private Wokwi `secrets.h`.
-- Dashboard reads require the same username/key in Streamlit Community Cloud's app secrets as `AIO_USERNAME` and `AIO_KEY`.
-- Never put the key in this repository, screenshots, source files, or a public Wokwi project. Revoke the previously pasted key.
-- Firmware TLS certificate verification must remain enabled. Configure the current CA certificate for `io.adafruit.com` in the private `secrets.h`.
+## Run and verify
 
-## Integration checklist
+1. Add identical broker host, port, credentials, and topic to Wokwi and Streamlit secrets.
+2. Start the hosted Wokwi simulation and confirm the MQTT connection and publish messages in its Serial Monitor.
+3. Open the desktop dashboard, start the embedded simulation, and move the distance slider. The LCD should update locally; the dashboard metrics, graph, and 3D fuel view should follow within a few seconds.
+4. Toggle the corrected generator switch and verify the dashboard state follows.
+5. Open the same site with `?view=mobile`; it should show live data, graph, and 3D tank but no simulation controls.
+6. Stop the Wokwi simulation. After 8 seconds without a message, the dashboard should label the reading stale.
+7. Check theft and generator-consumption behavior separately; do not mark those live cases passed until their LCD/indicator and dashboard behavior are captured.
 
-1. Create the seven telemetry feeds.
-2. Compare Wokwi Serial Monitor HTTP status and Adafruit IO latest telemetry values.
-3. Deploy `dashboard/app.py` to Streamlit Community Cloud and configure its app secrets.
-4. Open the default website on the desktop; start Wokwi and move its sensor slider or generator switch. Verify Serial Monitor and dashboard telemetry update.
-5. Confirm both dashboard views display the new readings, history, and 3D tank.
-6. Open the same website with `?view=mobile`; verify readings, graph, and tank are visible but no control widgets appear.
-7. Test theft with generator OFF and a drop greater than 5 percentage points within 60 seconds; compare LCD, buzzer, `theft` feed, and dashboard.
-8. Test generator ON with gradual decline; verify the hours-left value is available only when a usable trend exists.
+## Limits and troubleshooting
 
-The live dashboard displays the firmware alarm and uses an explainable rapid-drop threshold. The separate offline simulator dashboard includes an ML demonstration model trained on synthetic data; it is not validated against real theft observations.
-
-## View graphs in Adafruit IO
-
-Adafruit IO can show graphs without deploying the Python dashboard:
-
-1. Open **Dashboards** and create a dashboard, or open the existing one.
-2. Add a **Line Chart** block and select the `level` feed. Choose a time range and title it “Tank level (%)”.
-3. Add another **Line Chart** block for `litres` if you want the volume history too.
-4. Add **Gauge** blocks for `level` (0–100) and `litres` (0–500), plus **Indicator** blocks for `pump`, `generator`, and `theft`.
-5. Save the dashboard and keep the Wokwi simulation running to produce graph data.
-
-The website provides a live Plotly graph, system status, and an interactive WebGL tank that follows the reported level. Its mobile URL is read-only; operate the simulation in the embedded Wokwi window on desktop.
-
-The live visualization uses the Onshape-exported `diesel-tank.gltf` at the repository root. The dashboard embeds the model data into the viewer component, so it does not need a separate asset host.
-
-Out-of-range level feed values are retained in history for diagnosis, excluded from the graph, and flagged in the event log. The live level is recalculated from sensor distance if the level feed is invalid; if both are invalid, the dashboard displays `INVALID` rather than a misleading percentage.
+- **No MQTT messages:** verify Wokwi Wi-Fi, hostname, TLS port, credentials, certificate PEM, topic spelling, and broker ACL. Compare Serial Monitor messages with the dashboard broker configuration.
+- **Dashboard says it is waiting:** confirm Streamlit Community Cloud can reach the broker on outbound TLS port `8883`, then check the browser's page refresh and the broker connection limit.
+- **Metrics update but graph resets after redeploy:** chart history is intentionally process-local and not persisted. Add a database only if retained long-term history is required.
+- **Generator switch short warning:** re-import the corrected `diagram.json`; do not continue toggling the old public diagram.
+- **No real ML classifier:** the separate offline simulator's model is trained on synthetic examples and is not validated for real theft detection.

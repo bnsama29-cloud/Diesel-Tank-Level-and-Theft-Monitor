@@ -1,69 +1,60 @@
 # Diesel Tank Level and Theft Monitor
 
-An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic sensor, controls a refill relay with hysteresis, detects rapid unexplained drops, and publishes readings to a mobile-friendly browser dashboard with live graphs and an interactive 3D diesel chamber.
+An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic sensor, controls a refill relay with hysteresis, detects rapid unexplained drops, and publishes live readings to a mobile-friendly dashboard with graphs and an interactive 3D tank.
 
 ## What it does
 
-- Converts the sensor distance to tank level and volume for a 500 L tank. The calibrated sensor span is 5 cm (full) to 105 cm (empty).
+- Converts sensor distance to level and volume for a 500 L tank (5 cm full, 105 cm empty).
 - Shows level and volume on an I2C LCD and indicates LOW / MEDIUM / FULL with LEDs.
 - Turns the refill pump ON at or below 20%; once on, it stays on until the level rises above 90%.
-- Reads the generator slide switch and detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
-- Publishes seven telemetry values over HTTPS from Wokwi through Adafruit IO as the cloud relay.
-- Displays live readings, recent feed records, history, status, and an interactive WebGL 3D chamber in a Streamlit website. Simulation inputs are controlled only in Wokwi; the mobile URL is read-only.
-- Renders the team's Onshape-exported `diesel-tank.gltf` model in the live 3D view, with the fuel surface driven by the reported tank level.
-- Keeps the Wokwi simulation mounted in a right-side panel that can be resized or expanded to fullscreen; tank status and 3D view appear on the left, with live feed records and graph in the middle.
+- Detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
+- Publishes one retained JSON telemetry message over secure MQTT every 2 seconds.
+- Shows status, recent level history, and the team's Onshape-exported interactive 3D chamber in a Streamlit desktop/mobile website.
+- Embeds the Wokwi simulator on desktop; the `?view=mobile` view is read-only.
 
 ## Repository layout
 
 ```text
-firmware/
-  wokwi/                 Wokwi sketch, circuit, libraries, and private-secrets template
-dashboard/
-  app.py                 Desktop control room and mobile read-only website
-  simulator_app.py       Offline scenario and ML demonstration dashboard
-  assets/                Tank visualization embedded by the live dashboard
-  models/                Trained demo model artifact
-diesel-tank.gltf         Onshape-exported 3D chamber used by the live dashboard
-  ...                    Dashboard logic, simulators, tests, and model training
-docs/
-  integration.md         Adafruit feed contract and cloud setup
-  test-evidence.md       Wokwi and dashboard verification checklist
-requirements.txt         Dependencies for both dashboard entry points
+firmware/wokwi/            ESP32 sketch, Wokwi circuit, libraries, secrets template
+dashboard/app.py           Live desktop and read-only mobile dashboard
+dashboard/simulator_app.py Offline scenario and synthetic ML demonstration
+dashboard/assets/          3D tank viewer
+dashboard/models/          Synthetic demonstration model
+diesel-tank.gltf            Onshape-exported tank mesh
+docs/integration.md         MQTT broker setup and end-to-end test steps
+docs/test-evidence.md       Evidence checklist and captured report images
+requirements.txt            Python dependencies
 ```
 
-## See the live dashboard
+## Live dashboard setup
 
-Deploy this repository on [Streamlit Community Cloud](https://share.streamlit.io/) and set the app file to `dashboard/app.py`. The default app URL is the desktop monitor with the embedded Wokwi simulation; append `?view=mobile` for a read-only mobile view. Add the following under the app's **Settings → Secrets**:
+1. Create a free HiveMQ Cloud serverless cluster, MQTT credentials, and an access rule for `diesel-tank/telemetry`.
+2. Deploy this repository to Streamlit Community Cloud with `dashboard/app.py` as the app file.
+3. Add the broker host, port, username, password, and topic as Streamlit app secrets.
+4. Configure the same broker values and trusted root CA certificate in a private Wokwi `secrets.h`.
+5. Copy the current `firmware/wokwi/sketch.ino` and corrected `firmware/wokwi/diagram.json` into the hosted Wokwi project, then start the simulation.
 
-```toml
-AIO_USERNAME = "your_adafruit_username"
-AIO_KEY = "your_private_adafruit_io_key"
-```
+The firmware publishes every 2 seconds and the dashboard refreshes every 2 seconds. Expect a few seconds of end-to-end delay depending on network and hosting conditions. Adafruit IO is not used. The dashboard retains recent graph samples in app memory; that history resets when the hosted app restarts.
 
-Create the seven telemetry feeds documented in [`docs/integration.md`](docs/integration.md). The desktop dashboard embeds the [Wokwi project](https://wokwi.com/projects/478875514435866625); start the simulation there and use its sensor slider and generator switch. The firmware publishes telemetry to Adafruit IO; both desktop and mobile views refresh readings every 20 seconds, and the mobile view is read-only.
+Full setup and troubleshooting instructions are in [`docs/integration.md`](docs/integration.md). Never commit broker secrets or expose them in public Wokwi files.
 
-## Run the simulation dashboard
+## Offline simulator
 
-The separate simulator is useful for demonstrating scenarios without cloud credentials. In a Python environment with the repository requirements installed:
+The offline demo runs without broker credentials:
 
 ```text
 streamlit run dashboard/simulator_app.py
 ```
 
-It includes manual readings and hysteresis, theft, and generator-consumption scenarios. The included ML model is trained on synthetic demonstration data; it has not been validated as a production theft classifier.
-
-## Wokwi simulation
-
-The desktop website embeds the public Wokwi simulation directly, so you can start and interact with the circuit there. The firmware uses `Wokwi-GUEST` with a blank Wi-Fi password; it does not use home Wi-Fi. Keep Adafruit credentials in private Wokwi secrets and Streamlit secrets; never place real credentials in the public sketch. Adafruit IO remains the background telemetry bridge; you do not need to open its UI while demonstrating.
-
-The Wokwi project is hosted separately from this Git repository. If its sketch still polls the old `command` feed, copy the updated `firmware/wokwi/sketch.ino` into the Wokwi editor and save the project; the dashboard now only reads telemetry.
+It includes manual controls, scenario playback, charts, and an ML demonstration trained on synthetic data. The model is not validated as a real-world theft classifier.
 
 ## Validation
 
-Run the focused dashboard/data tests from the repository root:
+Run tests from the repository root:
 
 ```text
 python -m unittest discover -s dashboard -p "test_*.py" -v
+python dashboard/test_integration.py
 ```
 
-Check the Wokwi, background cloud relay, and dashboard scenarios in [`docs/test-evidence.md`](docs/test-evidence.md). The documented expectations should only be marked PASS after checking the actual simulation.
+Live hardware/cloud cases should be marked passed only after checking the actual Wokwi circuit and deployed dashboard; see [`docs/test-evidence.md`](docs/test-evidence.md).
