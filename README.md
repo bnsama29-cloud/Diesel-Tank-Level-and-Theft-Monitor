@@ -1,101 +1,64 @@
-# ⛽ Diesel Tank Level & Theft Monitor — Python Dashboard
+# Diesel Tank Level and Theft Monitor
 
-A real-time monitoring dashboard for diesel tank level tracking, pump hysteresis control, and **ML-based theft detection**. Built with Streamlit, scikit-learn, and Plotly.
+An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic sensor, controls a refill relay with hysteresis, detects rapid unexplained drops, and publishes readings to Adafruit IO. A browser dashboard presents live readings, historical graphs, alarms, and a tank visualization.
 
-## 🏗️ Architecture
+## What it does
 
-```
-ESP32 / Wokwi ──WebSocket/MQTT──▶ bridge.py ──▶ tank_model.py ──▶ ml_detector.py
-                                                                        │
-                                                                        ▼
-                simulator.py (offline testing) ──────────────▶     app.py (Dashboard)
-```
+- Converts the sensor distance to tank level and volume for a 500 L tank. The calibrated sensor span is 5 cm (full) to 105 cm (empty).
+- Shows level and volume on an I2C LCD and indicates LOW / MEDIUM / FULL with LEDs.
+- Turns the refill pump ON at or below 20%; once on, it stays on until the level rises above 90%.
+- Reads the generator slide switch and detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
+- Publishes seven telemetry values to Adafruit IO using HTTPS from Wokwi.
+- Displays Adafruit feed history and current system status in a Streamlit dashboard.
 
-## 📦 Setup
+## Repository layout
 
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Train the ML model (generates synthetic data + trains Isolation Forest + Gradient Boosting)
-python train_model.py
-
-# 3. Launch the dashboard
-streamlit run app.py
-```
-
-## 🎬 Demo Test Cases
-
-| # | Scenario | What to Expect |
-|---|----------|----------------|
-| 1 | **Hysteresis Demo** | Level sweeps Full→Empty→Full. Pump turns ON at 20%, OFF at 90% (hysteresis). |
-| 2 | **Theft Demo** | Generator OFF, level drops 20% in 20s. ML detects theft, flashing red alert + buzzer. |
-| 3 | **Consumption Demo** | Generator ON, steady 0.5%/s drain. Dashboard shows **hours remaining** countdown. |
-
-Click the scenario buttons on the dashboard to run each demo.
-
-## 🧠 ML Theft Detection
-
-Instead of a rigid "5% drop in 1 minute" rule, we use an **ensemble ML model**:
-
-- **Isolation Forest** — unsupervised anomaly detection (catches novel theft patterns)
-- **Gradient Boosting Classifier** — supervised classifier (high accuracy on known patterns)
-
-### Features Used
-| Feature | Description |
-|---------|-------------|
-| `rate_of_change` | Level change per second (30s window) |
-| `rate_of_change_10s` | Level change per second (10s window) |
-| `rolling_std` | Standard deviation of level readings |
-| `drop_magnitude` | Max drop from peak in window |
-| `generator_state` | Generator ON (1) or OFF (0) |
-| `level_current` | Current level percentage |
-| `acceleration` | Rate-of-change of rate-of-change |
-| `drop_sharpness` | Ratio of short-term to long-term drop rate |
-
-### Why ML > Fixed Rules?
-- Adapts to different theft speeds and patterns
-- Reduces false alarms from sensor noise
-- Provides **confidence scores** instead of binary alerts
-- Can distinguish consumption (gen ON) from theft (gen OFF) contextually
-
-## 🔌 Connecting to Wokwi
-
-1. Your friend's ESP32 should broadcast JSON via WebSocket:
-   ```json
-   { "distance_cm": 45.2, "generator_on": false, "pump_on": true }
-   ```
-2. In the dashboard sidebar, select **WebSocket (Wokwi)**
-3. Enter the WebSocket URL (default: `ws://localhost:4000`)
-4. Click **🔌 Connect WebSocket**
-
-MQTT is also supported with topic `diesel/sensor`.
-
-## 📁 Project Structure
-
-```
-├── app.py              # Streamlit dashboard (main entry point)
-├── bridge.py           # WebSocket/MQTT data ingestion
-├── tank_model.py       # Tank physics & calculations
-├── ml_detector.py      # ML anomaly detection (IF + GB ensemble)
-├── simulator.py        # Test scenario generator
-├── train_model.py      # Synthetic data generation & model training
-├── models/
-│   └── theft_detector.joblib  # Trained ML model
-├── requirements.txt
-└── README.md
+```text
+firmware/
+  wokwi/                 Wokwi sketch, circuit, libraries, and private-secrets template
+dashboard/
+  app.py                 Live Adafruit IO dashboard (Streamlit Cloud entry point)
+  simulator_app.py       Offline scenario and ML demonstration dashboard
+  assets/                Tank visualization embedded by the live dashboard
+  models/                Trained demo model artifact
+  ...                    Dashboard logic, simulators, tests, and model training
+docs/
+  integration.md         Adafruit feed contract and cloud setup
+  test-evidence.md       Wokwi and dashboard verification checklist
+requirements.txt         Dependencies for both dashboard entry points
 ```
 
-## 🔧 Tank Configuration
+## See the live dashboard
 
-Default: **100 cm deep, 500 L cylindrical tank**
+Deploy this repository on [Streamlit Community Cloud](https://share.streamlit.io/) and set the app file to `dashboard/app.py`. Add the following under the app's **Settings → Secrets**:
 
-Adjustable in the dashboard sidebar:
-- Tank depth (cm)
-- Tank capacity (L)
-- Pump ON threshold (20%)
-- Pump OFF threshold (90%)
+```toml
+AIO_USERNAME = "your_adafruit_username"
+AIO_KEY = "your_private_adafruit_io_key"
+```
 
-## License
+Keep the Wokwi simulation running and publishing to the feeds in [`docs/integration.md`](docs/integration.md). The dashboard refreshes every 20 seconds and charts stored `level` readings.
 
-Academic project — Skill Lab EL
+## Run the simulation dashboard
+
+The separate simulator is useful for demonstrating scenarios without cloud credentials. In a Python environment with the repository requirements installed:
+
+```text
+streamlit run dashboard/simulator_app.py
+```
+
+It includes manual readings and hysteresis, theft, and generator-consumption scenarios. The included ML model is trained on synthetic demonstration data; it has not been validated as a production theft classifier.
+
+## Wokwi simulation
+
+Use the files in [`firmware/wokwi/`](firmware/wokwi/) in your Wokwi project. The firmware uses `Wokwi-GUEST` with a blank Wi-Fi password; it does not use home Wi-Fi. Create a private `secrets.h` in Wokwi based on [`secrets.h.example`](firmware/wokwi/secrets.h.example), entering Adafruit credentials there. Never commit real credentials or make a public Wokwi project containing them.
+
+## Validation
+
+Run the focused dashboard/data tests from the repository root:
+
+```text
+python -m unittest discover -s dashboard -p "test_*.py" -v
+```
+
+Check the Wokwi, Adafruit IO, and dashboard scenarios in [`docs/test-evidence.md`](docs/test-evidence.md). The documented expectations should only be marked PASS after checking the actual simulation.

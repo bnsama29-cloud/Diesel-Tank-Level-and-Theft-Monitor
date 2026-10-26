@@ -1,5 +1,5 @@
 # Local credentials
-person1-esp32/secrets.h
+firmware/wokwi/secrets.h
 .streamlit/secrets.toml
 .env
 

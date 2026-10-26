@@ -62,7 +62,7 @@ def fetch_latest_feed(username: str, key: str, feed: str) -> tuple[float, dateti
 
 
 def render_tank(level: float) -> None:
-    template_path = Path(__file__).parent.parent / "person3-3d-tank" / "tank_viewer.html"
+    template_path = Path(__file__).parent / "assets" / "tank_viewer.html"
     template = template_path.read_text(encoding="utf-8")
     safe_level = max(0.0, min(100.0, level))
     html = template.replace("__LEVEL_PERCENT__", f"{safe_level:.1f}")

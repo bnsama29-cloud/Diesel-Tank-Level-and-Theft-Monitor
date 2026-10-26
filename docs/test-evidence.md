@@ -1,6 +1,6 @@
 # Demonstration evidence checklist
 
-Save Wokwi, Adafruit IO, dashboard, and tank-viewer screenshots here after capturing them. Do not include account keys, private feed URLs, or personal Wi-Fi details in screenshots.
+Save Wokwi, Adafruit IO, dashboard, and tank-viewer screenshots in this folder after capturing them. Do not include account keys, private feed URLs, or personal Wi-Fi details in screenshots.
 
 | Test | Setup | Expected result | Actual |
 | --- | --- | --- | --- |

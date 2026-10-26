@@ -51,12 +51,12 @@ The dashboard combines the latest feed values into a common record:
 
 1. Verify each feed appears in Adafruit IO and receives updated values.
 2. Compare Wokwi Serial Monitor HTTP status and Adafruit IO latest feed values.
-3. Configure Streamlit secrets and deploy `person2-dashboard-ml/`.
+3. Deploy `dashboard/app.py` to Streamlit Community Cloud and configure its app secrets.
 4. Check that the dashboard displays all feed values and the tank fill follows `level`.
 5. Test theft with generator OFF and a drop greater than 5 percentage points within 60 seconds; compare LCD, buzzer, `theft` feed, and dashboard.
 6. Test generator ON with gradual decline; verify the hours-left value is available only when a usable trend exists.
 
-The current dashboard uses an explainable threshold rule, not a trained ML classifier. Person 2 should only add a learned model after collecting representative normal-use and theft-labeled observations.
+The live dashboard displays the firmware alarm and uses an explainable rapid-drop threshold. The separate offline simulator dashboard includes an ML demonstration model trained on synthetic data; it is not validated against real theft observations.
 
 ## View graphs in Adafruit IO
 
@@ -68,4 +68,4 @@ Adafruit IO can show graphs without deploying the Python dashboard:
 4. Add **Gauge** blocks for `level` (0–100) and `litres` (0–500), plus **Indicator** blocks for `pump`, `generator`, and `theft`.
 5. Save the dashboard and keep the Wokwi simulation running to produce graph data.
 
-For a custom, more polished dashboard outside Adafruit IO, deploy `person2-dashboard-ml/app.py` to Streamlit Community Cloud and add the Adafruit username/key under that app's private **Settings → Secrets**. This dashboard adds a level-history Plotly graph and the synchronized tank visualization.
+For a custom, more polished dashboard outside Adafruit IO, deploy `dashboard/app.py` to Streamlit Community Cloud and add the Adafruit username/key under that app's private **Settings → Secrets**. This dashboard adds a level-history Plotly graph and the synchronized tank visualization.
