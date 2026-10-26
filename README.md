@@ -11,6 +11,7 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 - Publishes seven telemetry values over HTTPS from Wokwi through Adafruit IO as the cloud relay.
 - Displays live readings, history, status, and an interactive WebGL 3D chamber in a Streamlit website. The desktop view embeds the Wokwi simulation and controls virtual sensor/generator inputs; a mobile URL is read-only.
 - Renders the team's Onshape-exported `diesel-tank.gltf` model in the live 3D view, with the fuel surface driven by the reported tank level.
+- Keeps the Wokwi simulation mounted in a right-side panel that can be resized in width and height or expanded to fullscreen, while the left live-status, event log, 3D model, and graph refresh independently.
 
 ## Repository layout
 

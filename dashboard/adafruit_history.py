@@ -21,7 +21,7 @@ def parse_level_history(payload: Any) -> list[dict[str, float | datetime]]:
             ) from exc
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
-        readings.append({"timestamp": timestamp, "level": max(0.0, min(100.0, level))})
+        readings.append({"timestamp": timestamp, "level": level})
 
     readings.sort(key=lambda reading: reading["timestamp"])
     return readings

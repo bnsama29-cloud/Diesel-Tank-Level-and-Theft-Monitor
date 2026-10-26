@@ -18,11 +18,11 @@ class AdafruitHistoryTests(unittest.TestCase):
             datetime(2026, 10, 26, 10, 1, tzinfo=timezone.utc),
         )
 
-    def test_clamps_out_of_range_level(self):
+    def test_preserves_out_of_range_level_for_validation(self):
         rows = parse_level_history(
             [{"value": "120", "created_at": "2026-10-26T10:00:00Z"}]
         )
-        self.assertEqual(rows[0]["level"], 100.0)
+        self.assertEqual(rows[0]["level"], 120.0)
 
     def test_rejects_malformed_history(self):
         with self.assertRaises(ValueError):

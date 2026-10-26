@@ -2,6 +2,8 @@
 
 Adafruit IO is the background data relay between Wokwi and the hosted website. The desktop dashboard embeds the public Wokwi project; start the simulator inside that page. The simulation publishes telemetry; the website reads it and can send virtual sensor/switch inputs back to the ESP32. A mobile URL provides the same live readings, graph, and 3D tank in read-only mode, without embedding Wokwi or showing controls. Viewers do not need to open the Adafruit IO dashboard.
 
+The desktop layout keeps live status, an event/telemetry log, 3D model, and graph on the left, with the control panel and smaller Wokwi window on the right. Drag the simulation's lower-right corner to resize its width and height, or use browser fullscreen. Telemetry refreshes in a Streamlit fragment every 20 seconds so it does not restart the embedded simulation.
+
 ## Feeds
 
 Create these eight Adafruit IO feeds with the exact lowercase keys:
@@ -83,3 +85,5 @@ Adafruit IO can show graphs without deploying the Python dashboard:
 The website provides a live Plotly graph, system status, and an interactive WebGL tank that follows the reported level. Its mobile URL is read-only; use the default desktop URL for simulation controls.
 
 The live visualization uses the Onshape-exported `diesel-tank.gltf` at the repository root. The dashboard embeds the model data into the viewer component, so it does not need a separate asset host.
+
+Out-of-range level feed values are retained in history for diagnosis, excluded from the graph, and flagged in the event log. The live level is recalculated from sensor distance if the level feed is invalid; if both are invalid, the dashboard displays `INVALID` rather than a misleading percentage.
