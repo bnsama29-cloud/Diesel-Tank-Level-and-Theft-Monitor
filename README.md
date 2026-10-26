@@ -9,7 +9,7 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 - Turns the refill pump ON at or below 20%; once on, it stays on until the level rises above 90%.
 - Reads the generator slide switch and detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
 - Publishes seven telemetry values over HTTPS from Wokwi through Adafruit IO as the cloud relay.
-- Displays live readings, history, status, and an interactive WebGL 3D chamber in a Streamlit website. The desktop view controls virtual sensor/generator inputs; a mobile URL is read-only.
+- Displays live readings, history, status, and an interactive WebGL 3D chamber in a Streamlit website. The desktop view embeds the Wokwi simulation and controls virtual sensor/generator inputs; a mobile URL is read-only.
 
 ## Repository layout
 
@@ -17,7 +17,7 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 firmware/
   wokwi/                 Wokwi sketch, circuit, libraries, and private-secrets template
 dashboard/
-  app.py                 Mobile monitoring website (Streamlit Cloud entry point)
+  app.py                 Desktop control room and mobile read-only website
   simulator_app.py       Offline scenario and ML demonstration dashboard
   assets/                Tank visualization embedded by the live dashboard
   models/                Trained demo model artifact
@@ -30,7 +30,7 @@ requirements.txt         Dependencies for both dashboard entry points
 
 ## See the live dashboard
 
-Deploy this repository on [Streamlit Community Cloud](https://share.streamlit.io/) and set the app file to `dashboard/app.py`. The default app URL is the desktop control room; append `?view=mobile` for a read-only mobile view. Add the following under the app's **Settings → Secrets**:
+Deploy this repository on [Streamlit Community Cloud](https://share.streamlit.io/) and set the app file to `dashboard/app.py`. The default app URL is the desktop control room with the embedded Wokwi simulation; append `?view=mobile` for a read-only mobile view. Add the following under the app's **Settings → Secrets**:
 
 ```toml
 AIO_USERNAME = "your_adafruit_username"
@@ -38,7 +38,7 @@ AIO_KEY = "your_private_adafruit_io_key"
 CONTROL_PASSWORD = "choose_a_private_dashboard_control_password"
 ```
 
-Create all eight feeds documented in [`docs/integration.md`](docs/integration.md), including `command`. Keep the Wokwi simulation running and upload the current [`sketch.ino`](firmware/wokwi/sketch.ino) to that Wokwi project. The simulation publishes to Adafruit IO in the background and checks for desktop controls every 10 seconds. Both views refresh telemetry every 20 seconds; each shows the live graph and 3D tank, and mobile exposes no controls. Set a private `CONTROL_PASSWORD` secret to protect the desktop command interface.
+Create all eight feeds documented in [`docs/integration.md`](docs/integration.md), including `command`. The desktop dashboard embeds the [Wokwi project](https://wokwi.com/projects/478875514435866625); start its simulation inside the dashboard. The firmware publishes to Adafruit IO and checks for desktop controls every 10 seconds. Both views refresh telemetry every 20 seconds; each shows the live graph and 3D tank, while mobile hides Wokwi and all controls. Set a private `CONTROL_PASSWORD` secret to protect the desktop command interface.
 
 ## Run the simulation dashboard
 
@@ -52,7 +52,7 @@ It includes manual readings and hysteresis, theft, and generator-consumption sce
 
 ## Wokwi simulation
 
-Use the files in [`firmware/wokwi/`](firmware/wokwi/) in your Wokwi project. The firmware uses `Wokwi-GUEST` with a blank Wi-Fi password; it does not use home Wi-Fi. Create a private `secrets.h` in Wokwi based on [`secrets.h.example`](firmware/wokwi/secrets.h.example), entering Adafruit credentials there. Never commit real credentials or make a public Wokwi project containing them. Adafruit IO is the background bridge because the hosted dashboard cannot directly receive a connection from Wokwi's public gateway; you don't need to open Adafruit's UI while demonstrating the project.
+The desktop website embeds the public Wokwi simulation directly, so you can start and interact with the circuit from the dashboard. The firmware uses `Wokwi-GUEST` with a blank Wi-Fi password; it does not use home Wi-Fi. Keep Adafruit credentials in private Wokwi secrets and Streamlit secrets; never place real credentials in the public sketch. Adafruit IO remains the background bridge; you do not need to open its UI while demonstrating.
 
 ## Validation
 

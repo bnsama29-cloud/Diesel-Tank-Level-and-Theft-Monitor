@@ -34,6 +34,7 @@ THEFT_WINDOW_SECONDS = 60
 THEFT_DROP_PERCENT = 5.0
 TANK_CAPACITY_LITRES = 500.0
 HISTORY_LIMIT = 500
+WOKWI_EMBED_URL = "https://wokwi.com/projects/478875514435866625?embed=1"
 
 
 def render_tank(level: float, litres: float) -> None:
@@ -215,6 +216,13 @@ if not mobile_view:
                     st.success("Control released. Wokwi sensor and switch are active again.")
                 except requests.RequestException as exc:
                     st.error(f"Could not release dashboard controls: {exc}")
+
+    st.subheader("Wokwi simulation")
+    st.caption(
+        "Run and interact with the ESP32 simulation here. Sensor/switch changes in "
+        "the circuit take control back from dashboard virtual inputs."
+    )
+    components.iframe(WOKWI_EMBED_URL, height=720, scrolling=False)
 
 if "level_history" not in st.session_state:
     st.session_state.level_history = []

@@ -1,6 +1,6 @@
 # Shared integration contract
 
-Adafruit IO is the background data relay between Wokwi and the hosted website. The laptop Wokwi simulation publishes telemetry; the desktop website reads it and can send virtual sensor/switch inputs back to the ESP32. A mobile URL provides the same live readings, graph, and 3D tank in read-only mode. Viewers do not need to open the Adafruit IO dashboard.
+Adafruit IO is the background data relay between Wokwi and the hosted website. The desktop dashboard embeds the public Wokwi project; start the simulator inside that page. The simulation publishes telemetry; the website reads it and can send virtual sensor/switch inputs back to the ESP32. A mobile URL provides the same live readings, graph, and 3D tank in read-only mode, without embedding Wokwi or showing controls. Viewers do not need to open the Adafruit IO dashboard.
 
 ## Feeds
 
@@ -21,11 +21,11 @@ The firmware posts each telemetry feed once per 20-second cycle (up to 21 data p
 
 ## Bidirectional simulation controls
 
-The desktop page (the app URL without a query string) has a virtual distance slider and generator toggle. **Apply dashboard inputs** writes `10000 + round(distance_cm * 10) + (2000 if generator_on else 0)` to `command`; `0` releases the override. The Wokwi firmware polls it every 10 seconds, uses the virtual inputs in the tank/pump/theft logic, and publishes the resulting telemetry. The desktop dashboard and mobile read-only page then show the updated readings, history graph, and 3D tank.
+The desktop page (the app URL without a query string) embeds the Wokwi simulation and has a virtual distance slider and generator toggle. **Apply dashboard inputs** writes `10000 + round(distance_cm * 10) + (2000 if generator_on else 0)` to `command`; `0` releases the override. The Wokwi firmware polls it every 10 seconds, uses the virtual inputs in the tank/pump/theft logic, and publishes the resulting telemetry. The desktop dashboard and mobile read-only page then show the updated readings, history graph, and 3D tank.
 
 If the physical HC-SR04 distance slider or generator switch is changed in Wokwi while remote inputs are active, the firmware returns control to Wokwi and clears the command. The remote inputs affect firmware behavior and reported readings; they do not move Wokwi's component graphics. **Return control to Wokwi** in the desktop page releases the virtual inputs manually.
 
-Use `?view=mobile` on the deployed website URL for the mobile read-only page. The default URL is the desktop control room.
+Use `?view=mobile` on the deployed website URL for the mobile read-only page. The default URL is the desktop control room with the embedded Wokwi simulation.
 
 ## Data shape
 
