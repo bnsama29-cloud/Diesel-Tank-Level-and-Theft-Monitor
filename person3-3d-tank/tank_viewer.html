@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #0e1726; color: #e5edf8; }
+    .stage { height: 360px; display: grid; place-items: center; overflow: hidden; }
+    .tank { position: relative; width: 230px; height: 230px; transform: skewY(-4deg); }
+    .front {
+      position: absolute; inset: 22px 40px 20px 20px; overflow: hidden;
+      border: 3px solid #91a9c6; border-radius: 8px 8px 14px 14px;
+      background: linear-gradient(90deg, #18283b, #243b54); z-index: 2;
+    }
+    .side {
+      position: absolute; top: 25px; right: 17px; width: 24px; height: 204px;
+      transform: skewY(-28deg); transform-origin: left top;
+      border: 3px solid #7892af; background: #1b3149;
+    }
+    .top {
+      position: absolute; top: 8px; left: 20px; width: 176px; height: 35px;
+      transform: skewX(-48deg); border: 3px solid #7892af; border-radius: 8px;
+      background: #263e59;
+    }
+    .liquid {
+      position: absolute; inset: auto 0 0; height: var(--level);
+      background: linear-gradient(180deg, #29c4df, #0879b7);
+      transition: height .7s ease;
+    }
+    .surface {
+      position: absolute; top: -9px; left: 0; width: 100%; height: 18px;
+      border-radius: 50%; background: #5de3ed; opacity: .8;
+    }
+    .scale { position: absolute; z-index: 3; top: 30px; right: 10px; height: 190px;
+      display: flex; flex-direction: column; justify-content: space-between;
+      color: #cbd5e1; font-size: 11px; }
+    .label { position: absolute; bottom: -20px; width: 100%; text-align: center;
+      color: #dbeafe; font-weight: 600; }
+    .reading { position: absolute; bottom: 14px; width: 100%; text-align: center;
+      z-index: 4; font-size: 19px; font-weight: 700; text-shadow: 0 1px 4px #001; }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div class="tank" style="--level: __LEVEL_PERCENT__%">
+      <div class="top"></div>
+      <div class="side"></div>
+      <div class="front">
+        <div class="liquid"><div class="surface"></div></div>
+        <div class="reading">__LEVEL_PERCENT__%</div>
+      </div>
+      <div class="scale"><span>100%</span><span>50%</span><span>0%</span></div>
+      <div class="label">500 L Diesel Tank</div>
+    </div>
+  </main>
+</body>
+</html>
