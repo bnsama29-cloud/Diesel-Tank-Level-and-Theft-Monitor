@@ -7,6 +7,6 @@ This folder contains the runnable Wokwi project:
 - `libraries.txt` — Wokwi Arduino library dependencies.
 - `secrets.h.example` — Adafruit IO credentials and trusted-CA template; put real credentials only in a private Wokwi `secrets.h`.
 
-The simulation connects to `Wokwi-GUEST` with a blank Wi-Fi password. Tank calibration is 5 cm full and 105 cm empty for a 500 L capacity. It writes a single JSON record to the `tank-telemetry` feed every 3 seconds. Configure Adafruit IO as documented in [`../../docs/integration.md`](../../docs/integration.md).
+The simulation connects to `Wokwi-GUEST` with a blank Wi-Fi password. Tank calibration is 5 cm full and 105 cm empty for a 500 L capacity. It writes a single JSON record to the `tank-telemetry` feed every 3 seconds. The sketch defaults `AIO_FEED_KEY` to `tank-telemetry` if it is not defined in `secrets.h`. Configure Adafruit IO as documented in [`../../docs/integration.md`](../../docs/integration.md).
 
 Keep the Adafruit IO key and private secrets out of GitHub and public Wokwi projects. TLS certificate verification must remain enabled.

@@ -6,6 +6,10 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+#ifndef AIO_FEED_KEY
+#define AIO_FEED_KEY "tank-telemetry"
+#endif
+
 // =====================================================
 // 1. ESP32-S2-MINI-1 PIN CONFIGURATION
 // =====================================================

@@ -7,9 +7,9 @@ def build_wokwi_embed_html() -> str:
       * {{ box-sizing: border-box; }}
       body {{ margin: 0; background: #101923; color: #d9e6f2; font: 11px system-ui, sans-serif; }}
       #simulation-frame {{
-        height: min(540px, calc(100vh - 150px));
+        height: min(760px, calc(100vh - 120px));
         width: 100%;
-        min-height: 320px;
+        min-height: 400px;
         max-height: calc(100vh - 80px);
         max-width: 100%;
         resize: both;

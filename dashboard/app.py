@@ -300,7 +300,7 @@ def render_live_dashboard(username: str, key: str, feed: str) -> None:
 def render_wokwi() -> None:
     components.html(
         build_wokwi_embed_html(),
-        height=650,
+        height=840,
         scrolling=False,
     )
 
@@ -315,7 +315,7 @@ st.markdown(
     """
     <style>
       .stApp { background: radial-gradient(ellipse at 15% 0%, #17324a 0, #0b1220 42%); }
-      .block-container { max-width: 1600px; padding-top: 1.4rem; }
+      .block-container { max-width: 1920px; padding-top: 1.4rem; }
       h1, h2, h3 { letter-spacing: -0.025em; }
       div[data-testid="stMetric"] {
         background: linear-gradient(145deg, rgba(25,46,67,.96), rgba(15,27,42,.96));
@@ -361,7 +361,7 @@ if mobile_view:
     )
     render_live_dashboard(aio_username, aio_key, aio_feed)
 else:
-    dashboard_column, simulation_column = st.columns([2.0, 1.0], gap="large")
+    dashboard_column, simulation_column = st.columns([0.8, 1.2], gap="large")
     with dashboard_column:
         render_live_dashboard(aio_username, aio_key, aio_feed)
     with simulation_column:
