@@ -17,6 +17,7 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 
 ```text
 firmware/wokwi/            ESP32 sketch, Wokwi circuit, libraries, secrets template
+firmware/wokwi-local-only/ Standalone Wokwi demo with no Wi-Fi or cloud
 dashboard/app.py           Live desktop and read-only mobile dashboard
 dashboard/simulator_app.py Offline scenario and synthetic ML demonstration
 dashboard/assets/          3D tank viewer
@@ -38,6 +39,8 @@ requirements.txt            Python dependencies
 The firmware writes sensor readings every 3 seconds. A Serial Monitor distance entry is sent once, then Wokwi waits for the dashboard to acknowledge it through `tank-manual-ack` before requesting the next number. The dashboard polls telemetry every 3 seconds. The simulated tank capacity is 100 L: 5 cm is full, 105 cm is empty, and 55 cm is about 50 L. Expect a few seconds of end-to-end delay depending on network and hosting conditions. The dashboard chart uses recent feed history and does not depend on a 3D model.
 
 Full setup and troubleshooting instructions are in [`docs/integration.md`](docs/integration.md). Never commit Adafruit IO keys or expose them in a public Wokwi project.
+
+For a Wokwi-only demonstration with no Adafruit IO or dashboard, use the separate [`firmware/wokwi-local-only/`](firmware/wokwi-local-only/) project. Its Serial Monitor accepts `0`–`105`, `AUTO`, and `CLEAR` commands while retaining the HC-SR04 slider.
 
 ## Offline simulator
 
