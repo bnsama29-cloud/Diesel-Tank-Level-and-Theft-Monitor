@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta, timezone
+from collections import deque
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 import sys
 from typing import Any
@@ -12,7 +13,11 @@ while dashboard_dir in sys.path:
     sys.path.remove(dashboard_dir)
 sys.path.insert(0, dashboard_dir)
 
-from adafruit_client import fetch_telemetry_history, post_manual_acknowledgment
+from adafruit_client import (
+    fetch_telemetry_history,
+    fetch_telemetry_history_range,
+    post_manual_acknowledgment,
+)
 from monitor_logic import detect_rapid_drop
 from resizable_dashboard import render_resizable_dashboard
 
@@ -46,23 +51,23 @@ def derive_theft_alarm(history: list[dict[str, Any]]) -> bool:
 def theft_marker_readings(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     markers = []
     previous_dashboard_alarm = False
+    recent_generator_off: deque[tuple[float, float]] = deque()
     for index, reading in enumerate(history):
         previous_firmware_alarm = index > 0 and history[index - 1]["theft_alarm"]
+        current_time = reading["timestamp"].timestamp()
+        while (
+            recent_generator_off
+            and current_time - recent_generator_off[0][0] > THEFT_WINDOW_SECONDS
+        ):
+            recent_generator_off.popleft()
         dashboard_alarm = False
         if not reading["generator_on"]:
-            current_time = reading["timestamp"].timestamp()
-            window = [
-                earlier
-                for earlier in history[:index]
-                if current_time - earlier["timestamp"].timestamp()
-                <= THEFT_WINDOW_SECONDS
-                and not earlier["generator_on"]
-            ]
             dashboard_alarm = bool(
-                window
-                and window[0]["level_percent"] - reading["level_percent"]
+                recent_generator_off
+                and recent_generator_off[0][1] - reading["level_percent"]
                 > THEFT_DROP_PERCENT
             )
+            recent_generator_off.append((current_time, reading["level_percent"]))
         firmware_alarm_edge = (
             reading["theft_alarm"] and not previous_firmware_alarm
         )
@@ -150,7 +155,7 @@ def build_level_chart(history: list[dict[str, Any]]) -> go.Figure:
             line={"color": "#42d3c8", "width": 3},
             fill="tozeroy",
             fillcolor="rgba(66,211,200,.12)",
-            hovertemplate="%{x|%H:%M:%S}<br>%{y:.1f}%<extra>Fuel level</extra>",
+            hovertemplate="%{x|%Y-%m-%d %H:%M:%S}<br>%{y:.1f}%<extra>Fuel level</extra>",
         )
     )
 
@@ -173,7 +178,7 @@ def build_level_chart(history: list[dict[str, Any]]) -> go.Figure:
                     name=label,
                     mode="markers",
                     marker={"color": color, "size": 11, "symbol": symbol},
-                    hovertemplate="%{x|%H:%M:%S}<br>%{y:.1f}%<extra>"
+                    hovertemplate="%{x|%Y-%m-%d %H:%M:%S}<br>%{y:.1f}%<extra>"
                     + label
                     + "</extra>",
                 )
@@ -200,7 +205,23 @@ def build_level_chart(history: list[dict[str, Any]]) -> go.Figure:
         plot_bgcolor="rgba(0,0,0,0)",
         font={"color": "#d9e6f2"},
         hovermode="x unified",
-        xaxis={"showgrid": False, "title": None},
+        xaxis={
+            "showgrid": False,
+            "title": None,
+            "type": "date",
+            "rangeslider": {"visible": True, "thickness": 0.08},
+            "rangeselector": {
+                "buttons": [
+                    {"count": 1, "label": "1h", "step": "hour", "stepmode": "backward"},
+                    {"count": 6, "label": "6h", "step": "hour", "stepmode": "backward"},
+                    {"count": 1, "label": "1d", "step": "day", "stepmode": "backward"},
+                    {"count": 7, "label": "7d", "step": "day", "stepmode": "backward"},
+                    {"step": "all", "label": "All"},
+                ],
+                "bgcolor": "rgba(25,46,67,.96)",
+                "font": {"color": "#d9e6f2"},
+            },
+        },
         yaxis={
             "range": [0, 100],
             "ticksuffix": "%",
@@ -210,6 +231,97 @@ def build_level_chart(history: list[dict[str, Any]]) -> go.Figure:
         legend={"orientation": "h", "y": 1.12, "x": 0},
     )
     return fig
+
+
+def render_history_explorer(username: str, key: str, feed: str) -> None:
+    st.subheader("Explore historical readings")
+    st.caption(
+        "Choose a UTC time range to load all matching Adafruit IO readings. "
+        "Use the chart range slider, scroll wheel, or Plotly toolbar to navigate."
+    )
+
+    now = datetime.now(timezone.utc)
+    with st.form("historical-range-form"):
+        start_column, end_column = st.columns(2)
+        with start_column:
+            start_date = st.date_input(
+                "Start date (UTC)",
+                value=(now - timedelta(days=1)).date(),
+                key="history-start-date",
+            )
+            start_clock = st.time_input(
+                "Start time (UTC)",
+                value=time(0, 0),
+                key="history-start-time",
+            )
+        with end_column:
+            end_date = st.date_input(
+                "End date (UTC)",
+                value=now.date(),
+                key="history-end-date",
+            )
+            end_clock = st.time_input(
+                "End time (UTC)",
+                value=now.time().replace(tzinfo=None, microsecond=0),
+                key="history-end-time",
+            )
+        submitted = st.form_submit_button("Load history")
+
+    if submitted:
+        start_time = datetime.combine(
+            start_date, start_clock, tzinfo=timezone.utc
+        )
+        end_time = datetime.combine(end_date, end_clock, tzinfo=timezone.utc)
+        if start_time >= end_time:
+            st.error("Choose an end date and time later than the start.")
+        else:
+            try:
+                history = fetch_telemetry_history_range(
+                    username, key, feed, start_time, end_time
+                )
+            except (requests.RequestException, ValueError) as exc:
+                st.error(
+                    f"Could not load historical readings: {exc} "
+                    "If the selected range is very large, try a shorter range."
+                )
+            else:
+                st.session_state.historical_readings = history
+                st.session_state.historical_range = (
+                    start_time.isoformat(),
+                    end_time.isoformat(),
+                )
+
+    history = st.session_state.get("historical_readings")
+    if history is None:
+        st.info("Select a date/time range and choose **Load history**.")
+        return
+    if len(history) < 2:
+        st.info(
+            f"Found {len(history)} reading in the selected range. "
+            "At least two readings are needed to draw a line."
+        )
+        return
+
+    start_text, end_text = st.session_state.historical_range
+    st.caption(
+        f"{len(history):,} readings loaded · "
+        f"{datetime.fromisoformat(start_text).strftime('%Y-%m-%d %H:%M UTC')} "
+        f"to {datetime.fromisoformat(end_text).strftime('%Y-%m-%d %H:%M UTC')}"
+    )
+    st.plotly_chart(
+        build_level_chart(history),
+        use_container_width=True,
+        config={
+            "displayModeBar": True,
+            "displaylogo": False,
+            "scrollZoom": True,
+        },
+        key="historical-fuel-level-chart",
+    )
+    st.caption(
+        "Drag the range-slider handles to select a time span. You can also zoom, "
+        "pan, and scroll horizontally; hover over points for their date and value."
+    )
 
 
 @st.fragment(run_every=POLL_INTERVAL_SECONDS)
@@ -457,3 +569,4 @@ render_live_dashboard(
     aio_feed,
     resizable_layout=True,
 )
+render_history_explorer(aio_username, aio_key, aio_feed)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from typing import Any
 
 import requests
@@ -153,3 +153,70 @@ def fetch_telemetry_history(
     )
     response.raise_for_status()
     return parse_telemetry_history(response.json())
+
+
+def fetch_telemetry_history_range(
+    username: str,
+    key: str,
+    feed: str,
+    start_time: datetime,
+    end_time: datetime,
+) -> list[dict[str, Any]]:
+    if not username or not key or not feed:
+        raise ValueError("Adafruit IO username, key, and feed are required.")
+    if (
+        start_time.tzinfo is None
+        or start_time.utcoffset() is None
+        or end_time.tzinfo is None
+        or end_time.utcoffset() is None
+    ):
+        raise ValueError("History range start and end times must include a timezone.")
+    if start_time >= end_time:
+        raise ValueError("History range start time must be earlier than its end time.")
+
+    url = (
+        f"https://io.adafruit.com/api/v2/{quote(username, safe='')}"
+        f"/feeds/{quote(feed, safe='')}/data"
+    )
+    params = {
+        "start_time": start_time.astimezone(timezone.utc).isoformat(),
+        "end_time": end_time.astimezone(timezone.utc).isoformat(),
+        "limit": 1000,
+    }
+    expected_path = urlsplit(url).path
+    headers = {"X-AIO-Key": key}
+    readings: list[dict[str, Any]] = []
+    requested_urls: set[str] = set()
+    next_url: str | None = None
+
+    while True:
+        request_url = next_url or url
+        if request_url in requested_urls:
+            raise ValueError("Adafruit IO returned a repeated history page link.")
+        requested_urls.add(request_url)
+
+        response = requests.get(
+            request_url,
+            headers=headers,
+            params=params if next_url is None else None,
+            timeout=8,
+        )
+        response.raise_for_status()
+        readings.extend(parse_telemetry_history(response.json()))
+
+        link = response.links.get("next", {})
+        next_url = link.get("url")
+        if not next_url:
+            break
+        parsed_next_url = urlsplit(next_url)
+        if (
+            parsed_next_url.scheme != "https"
+            or parsed_next_url.netloc.lower() != "io.adafruit.com"
+            or parsed_next_url.path != expected_path
+        ):
+            raise ValueError("Adafruit IO returned an unexpected history page link.")
+
+    return sorted(
+        readings,
+        key=lambda reading: (reading["received_at"], reading["timestamp"]),
+    )
