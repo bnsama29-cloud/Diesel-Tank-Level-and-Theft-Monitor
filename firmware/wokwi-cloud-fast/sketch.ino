@@ -24,6 +24,7 @@ const int LCD_SDA = 21;
 const int LCD_SCL = 20;
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
+const int WIFI_CHANNEL = 6;
 const char* AIO_HOST = "io.adafruit.com";
 const uint16_t AIO_PORT = 8883;
 const char* AIO_TOPIC = AIO_USERNAME "/feeds/" AIO_FEED_KEY;
@@ -419,7 +420,7 @@ void serviceCloudConnection() {
     if (now - lastWiFiAttemptTime >= WIFI_RETRY_INTERVAL_MS) {
       lastWiFiAttemptTime = now;
       Serial.println("Connecting to Wokwi Wi-Fi...");
-      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
     }
     return;
   }
@@ -477,7 +478,7 @@ void setup() {
   Serial.println("Waiting for Wokwi Wi-Fi before starting the tank monitor...");
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
 
   unsigned long lastRetryTime = millis();
   unsigned long lastWaitingMessageTime = millis();
@@ -485,7 +486,7 @@ void setup() {
     const unsigned long now = millis();
     if (now - lastRetryTime >= WIFI_RETRY_INTERVAL_MS) {
       lastRetryTime = now;
-      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
     }
     if (now - lastWaitingMessageTime >= 1000UL) {
       lastWaitingMessageTime = now;
