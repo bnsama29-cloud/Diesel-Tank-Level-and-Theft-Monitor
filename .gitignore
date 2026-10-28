@@ -1,5 +1,5 @@
 # Local credentials
-firmware/wokwi/secrets.h
+firmware/wokwi-cloud-fast/secrets.h
 .streamlit/secrets.toml
 .env
 

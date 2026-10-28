@@ -426,9 +426,12 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-title_column, refresh_column = st.columns([0.9, 0.1])
-with title_column:
-    st.title("⛽ Diesel Tank Monitor")
+st.title("⛽ Diesel Tank Monitor")
+st.caption(
+    "Live readings and fuel-level history · 100 L tank · "
+    "Theft rule: >5 percentage points in 60 seconds while generator OFF"
+)
+_, refresh_column = st.columns([0.88, 0.12])
 with refresh_column:
     st.button(
         "↻",
@@ -436,10 +439,6 @@ with refresh_column:
         help="Refresh live readings now",
         use_container_width=True,
     )
-st.caption(
-    "Live readings and fuel-level history · 100 L tank · "
-    "Theft rule: >5 percentage points in 60 seconds while generator OFF"
-)
 
 try:
     aio_username = st.secrets["AIO_USERNAME"]

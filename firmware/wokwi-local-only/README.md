@@ -1,6 +1,6 @@
 # Wokwi local-only diesel tank monitor
 
-This is a standalone Wokwi version of the project. It does not use Wi-Fi, Adafruit IO, Streamlit, credentials, or dashboard acknowledgments. The original cloud-enabled project remains in `firmware/wokwi/`.
+This is the standalone Wokwi-only version of the project. It does not use Wi-Fi, Adafruit IO, Streamlit, credentials, or dashboard acknowledgments. For the cloud-enabled version with a live dashboard, use `firmware/wokwi-cloud-fast/` and `dashboard/app.py`.
 
 ## Open in Wokwi
 
