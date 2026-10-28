@@ -472,6 +472,30 @@ void publishTelemetry() {
 
 void setup() {
   Serial.begin(115200);
+
+  Serial.println();
+  Serial.println("Waiting for Wokwi Wi-Fi before starting the tank monitor...");
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  unsigned long lastRetryTime = millis();
+  unsigned long lastWaitingMessageTime = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    const unsigned long now = millis();
+    if (now - lastRetryTime >= WIFI_RETRY_INTERVAL_MS) {
+      lastRetryTime = now;
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    }
+    if (now - lastWaitingMessageTime >= 1000UL) {
+      lastWaitingMessageTime = now;
+      Serial.println("Wi-Fi is not connected yet; waiting before startup.");
+    }
+    delay(50);
+  }
+
+  Serial.println("Wokwi Wi-Fi connected. Starting the tank monitor.");
+
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(LED_LOW, OUTPUT);
@@ -490,13 +514,10 @@ void setup() {
   lcd.setCursor(0, 0); lcd.print("Tank Monitor");
   lcd.setCursor(0, 1); lcd.print("Wokwi cloud MQTT");
 
-  Serial.println();
   Serial.println("Diesel tank monitor - Wokwi cloud MQTT mode.");
   Serial.println("Use HC-SR04 slider or enter 0-105 cm in Serial Monitor.");
   Serial.println("Commands: AUTO (sensor), CLEAR (alarm), DEMO (10-sec cases), STOP (cancel).");
 
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
   secureClient.setCACert(AIO_ROOT_CA);
   mqttClient.setServer(AIO_HOST, AIO_PORT);
   if (!mqttClient.setBufferSize(512)) {
@@ -505,9 +526,8 @@ void setup() {
   mqttClient.setKeepAlive(30);
   mqttClient.setSocketTimeout(2);
   lastWiFiAttemptTime = millis();
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  Serial.println("Connecting to Wokwi Wi-Fi and Adafruit IO MQTT.");
+  Serial.println("Connecting to Adafruit IO MQTT.");
 }
 
 void loop() {

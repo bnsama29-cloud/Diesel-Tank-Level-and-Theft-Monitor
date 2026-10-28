@@ -17,7 +17,7 @@ An interval of about 2.2 seconds allows approximately 27 updates per minute, bel
 1. Make a separate ESP32 project and import `sketch.ino`, `diagram.json`, and `libraries.txt` from this folder.
 2. Add a private `secrets.h` file to that Wokwi project. Use `secrets.h.example` as the template, then enter your Adafruit IO username and key and the trusted root CA certificate for `io.adafruit.com`.
 3. Keep the credentials private. Do not commit `secrets.h` or paste real keys into a public Wokwi project.
-4. Start the simulation and open the Serial Monitor. Confirm Wi-Fi and MQTT connect, then check for `Cloud update sent`.
+4. Start the simulation and open the Serial Monitor. The sketch waits for Wokwi Wi-Fi before initializing the LCD, reading inputs, or showing the operating commands. After `Wokwi Wi-Fi connected. Starting the tank monitor.`, wait for MQTT to connect and check for `Cloud update sent`.
 
 The feed key defaults to `tank-telemetry`. The dashboard reads `AIO_USERNAME`, `AIO_KEY`, and `AIO_FEED_KEY` from Streamlit secrets and refreshes the current values and graph every 2 seconds.
 
