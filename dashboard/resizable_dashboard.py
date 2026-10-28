@@ -29,6 +29,7 @@ def render_resizable_dashboard(
             "level_percent": latest["level_percent"],
             "generator_on": latest["generator_on"],
             "pump_on": latest["pump_on"],
+            "theft_alarm": latest["theft_alarm"],
             "hours_left": latest["hours_left"],
             "distance_cm": latest["distance_cm"],
         }

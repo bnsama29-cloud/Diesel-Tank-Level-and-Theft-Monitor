@@ -9,19 +9,19 @@ FRONTEND_DIR = Path(__file__).parent / "static" / "resizable_dashboard"
 
 
 class ResizableDashboardTests(unittest.TestCase):
-    def test_frontend_has_initial_three_panel_layout_and_drag_splitters(self):
+    def test_frontend_has_responsive_readings_and_graph_without_simulation(self):
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         script = (FRONTEND_DIR / "index.js").read_text(encoding="utf-8")
 
-        self.assertIn("--left-size: 25%", html)
-        self.assertIn('id="interpretation-panel"', html)
+        self.assertIn("grid-template-columns: minmax(260px, 34%)", html)
+        self.assertIn('id="values-panel"', html)
         self.assertIn('id="graph-panel"', html)
-        self.assertIn('id="simulation-panel"', html)
-        self.assertIn("pointerdown", script)
-        self.assertIn("pointermove", script)
+        self.assertIn("@media (max-width: 760px)", html)
+        self.assertNotIn("<iframe", html)
+        self.assertNotIn("wokwi.com/projects", html)
         self.assertIn("Plotly.react", script)
         self.assertIn("streamlit:render", script)
-        self.assertIn("window.screen.availHeight", script)
+        self.assertIn("window.innerWidth <= 760", script)
         self.assertIn("isStreamlitMessage: true", script)
         self.assertIn("streamlit:componentReady", script)
         self.assertIn("streamlit:setFrameHeight", script)
@@ -33,6 +33,7 @@ class ResizableDashboardTests(unittest.TestCase):
             "level_percent": 50.0,
             "generator_on": True,
             "pump_on": False,
+            "theft_alarm": False,
             "hours_left": 12.5,
             "distance_cm": 55.0,
         }

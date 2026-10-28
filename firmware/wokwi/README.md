@@ -1,4 +1,6 @@
-# Wokwi firmware and circuit
+# Original HTTPS Wokwi firmware and circuit
+
+This is the original HTTPS-based version and is retained for compatibility. For the faster MQTT route used by the current responsive dashboard, use the separate [`../wokwi-cloud-fast/`](../wokwi-cloud-fast/) project instead.
 
 This folder contains the runnable Wokwi project:
 

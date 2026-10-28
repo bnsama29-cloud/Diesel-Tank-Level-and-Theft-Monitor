@@ -1,35 +1,28 @@
-# Live Adafruit IO integration
+# Fast Adafruit IO integration
 
 ## Architecture
 
 ```text
-Wokwi ESP32 -- HTTPS, one JSON telemetry value every 3 seconds --> Adafruit IO feed
-                                                                    |
-                                                   HTTPS history read every 3 seconds
-                                                                    v
-                                                Streamlit desktop + mobile dashboard
-                                                         |
-                                         manual-reading acknowledgment POST
-                                                         v
-                                              Adafruit IO acknowledgment feed
-                                                         |
-                                              acknowledgment check by ESP32
+Wokwi ESP32 -- persistent TLS MQTT, one JSON point about every 2.2 seconds --> Adafruit IO
+                                                                                |
+                                                        HTTPS history read every 2 seconds
+                                                                                v
+                                                     Responsive Streamlit dashboard
+                                                     latest values | level graph
 ```
 
-The simulated tank capacity is **100 L**, with 5 cm calibrated as full and 105 cm as empty. The circuit remains the simulation control surface; dashboard controls are not used. The desktop page starts with interpretation and graph panels stacked in the left 25% and Wokwi in the right 75%. Drag the vertical splitter to change the left/right widths and the horizontal splitter to resize the interpretation and graph. These panel sizes remain unchanged during telemetry refreshes. Add `?view=mobile` for a read-only dashboard with a link to open Wokwi separately. The live dashboard does not load the 3D tank.
+The tank model is 100 L: 5 cm is full and 105 cm is empty. The page shows the current values to the left of the graph on desktop and stacks them on mobile. Wokwi is opened separately; the dashboard does not embed it. The offline project in `firmware/wokwi-local-only/` remains cloud-free, while this quick-cloud route is in `firmware/wokwi-cloud-fast/`.
 
-For level demonstrations, use the ultrasonic sensor slider as usual, or enter a distance from `0` to `105` in the Wokwi Serial Monitor and send the line. A numeric command temporarily selects manual-distance mode and sends one reading. The firmware then waits for the dashboard to write that reading's ID to `tank-manual-ack` before it prompts for another number. Enter `AUTO` at any time to cancel manual mode and return to periodic ultrasonic readings. In manual mode, the sensor input is bypassed, but generator-switch input, tank calculations, pump control, theft detection, LCD/LED/buzzer outputs, and cloud publishing continue to work.
+The cloud sketch reuses the local project's controls and behavior: move the HC-SR04 slider or enter `0`–`105` in the Serial Monitor. A typed number remains active for repeated readings until you enter `AUTO`; no dashboard acknowledgment is required. `CLEAR` resets the theft alarm.
 
-The ESP32 writes one feed point every 3 seconds (20 writes per minute), instead of writing seven separate feed points. The dashboard requests recent feed history every 3 seconds and marks readings stale after 10 seconds. Actual latency depends on Wokwi, Adafruit IO, Streamlit, network, and browser scheduling. The graph shows the recent points returned by Adafruit IO; it is not a permanent database.
+The cloud sketch keeps one TLS MQTT connection open instead of opening a new HTTPS/TLS connection for every upload. It publishes at a 2.2-second minimum interval (about 27 data points per minute), leaving headroom under Adafruit IO's current free-account limit of 30 points per minute. The dashboard reads feed history every 2 seconds and flags data older than 8 seconds as stale. These are target intervals; network, broker, hosting, and browser latency can vary. Check current Adafruit IO plan limits before using other devices or feeds.
 
 ## Create the Adafruit IO feed
 
 1. Sign in to [Adafruit IO](https://io.adafruit.com/).
-2. Create feeds with the keys `tank-telemetry` and `tank-manual-ack`. The dashboard writes a reading ID to the acknowledgment feed after it receives a manual-distance reading; Wokwi checks that feed before asking for another number.
-3. Copy your Adafruit IO username and active **AIO Key** from the account's key page.
-4. Keep the key private. If a real AIO key was ever committed or posted publicly, revoke it and create a replacement before continuing.
-
-The account's current rate limits and plan terms can change; verify them in Adafruit IO. At one write every 3 seconds, this firmware sends 20 data points per minute to this feed.
+2. Create one feed with the key `tank-telemetry`.
+3. Copy your Adafruit IO username and active AIO key from the account's key page.
+4. Keep the key private. If a real AIO key was committed or posted publicly, revoke it and create a replacement.
 
 ## Configure Streamlit Community Cloud
 
@@ -39,25 +32,23 @@ Deploy `dashboard/app.py` to Streamlit Community Cloud. Under **App settings →
 AIO_USERNAME = "your_adafruit_io_username"
 AIO_KEY = "your_private_adafruit_io_key"
 AIO_FEED_KEY = "tank-telemetry"
-AIO_ACK_FEED_KEY = "tank-manual-ack"
 ```
 
-Save the secrets and reboot the app if it does not restart automatically. Do not commit these values to GitHub.
+Save the secrets and reboot the app if it does not restart automatically. Never commit these values to GitHub.
 
 ## Configure Wokwi
 
-1. Make the Wokwi project private before entering a real AIO key. Do not put live keys in a public sketch.
-2. Copy `firmware/wokwi/sketch.ino` and the corrected `firmware/wokwi/diagram.json` into the hosted Wokwi project. Git pushes do not update Wokwi.
-3. Add a private `secrets.h` based on `firmware/wokwi/secrets.h.example`. Set `AIO_USERNAME` and `AIO_KEY` to the same values used in Streamlit. The firmware writes to the fixed `tank-telemetry` feed; if you choose another feed key, change that path in `sketch.ino` and set the matching `AIO_FEED_KEY` in Streamlit.
-4. Put the trusted root CA for `io.adafruit.com` in `AIO_ROOT_CA`. Keep TLS verification enabled; do not replace it with an insecure TLS bypass.
-5. Ensure the `LiquidCrystal I2C` library in `firmware/wokwi/libraries.txt` is installed.
-6. Start the simulation. In the Serial Monitor, expect `Wokwi Wi-Fi connected.` and successful Adafruit IO HTTP status lines. To test manual distance, enter a number from `0` to `105` and send it; enter `AUTO` to switch back to the ultrasonic slider.
+1. Create a separate Wokwi ESP32-S2 project. Copy `sketch.ino`, `diagram.json`, and `libraries.txt` from `firmware/wokwi-cloud-fast/`. Git pushes do not update a hosted Wokwi project.
+2. Add a private `secrets.h` based on `firmware/wokwi-cloud-fast/secrets.h.example`. Set `AIO_USERNAME` and `AIO_KEY` to the same values used in Streamlit; use `tank-telemetry` for `AIO_FEED_KEY`.
+3. Put the trusted root CA certificate for `io.adafruit.com` in `AIO_ROOT_CA`. TLS certificate verification must remain enabled.
+4. Ensure the `LiquidCrystal I2C` and `PubSubClient` libraries are installed.
+5. Start the simulation. The Serial Monitor should report Wi-Fi and MQTT connection status and then print `Cloud update sent: {...}` after successful publications.
 
-Keep the private `secrets.h` and AIO key out of GitHub. If Wokwi does not keep that file private in your project, do not use a real credential in a public project.
+Do not put real credentials in a public Wokwi project or commit `secrets.h`. If Wokwi cannot keep that file private, use only a test key that can be revoked.
 
 ## Telemetry format
 
-The ESP32 posts one Adafruit IO data point with a string value containing this JSON object:
+Each Adafruit IO feed value is a JSON object:
 
 ```json
 {
@@ -73,27 +64,27 @@ The ESP32 posts one Adafruit IO data point with a string value containing this J
 }
 ```
 
-`hours_left: -1` means no usable consumption estimate is available yet. The dashboard renders it as “—”. The single feed snapshot keeps all values synchronized to one sample.
-`manual_request_id: 0` identifies an ordinary sensor reading. A positive ID marks a one-time serial-entered reading; after the dashboard receives it, the dashboard writes that ID to the separate acknowledgment feed.
+`hours_left: -1` means no usable consumption estimate is available yet; the dashboard renders it as “—”. `manual_request_id` stays zero because this project does not wait for dashboard acknowledgments.
 
 ## Run and verify
 
-1. Add matching AIO username, key, and feed key to Streamlit and the private Wokwi `secrets.h`.
-2. Start Wokwi. Confirm Wi-Fi connects and the Serial Monitor prints `Adafruit IO value: {...}` followed by `Adafruit IO telemetry: HTTP 200` for successful posts.
-3. Open the desktop dashboard. It should show **LIVE**, last-received age, fuel in litres and percent, generator, pump, runtime estimate, and a plain-language interpretation.
-4. Move the distance slider, or type a distance such as `55` into the Serial Monitor and send it. Confirm the LCD and LEDs update locally, then the dashboard values and graph follow within a few seconds. The dashboard acknowledgment allows Wokwi to prompt for the next number. Type `AUTO` to return to periodic HC-SR04 slider readings.
-5. Test the pump hysteresis: it should turn ON at or below 20% and turn OFF only above 90%.
-6. Turn the generator OFF and drop the level by more than 5 percentage points within one minute. Confirm the firmware alarm and dashboard suspected-theft interpretation.
-7. Turn the generator ON and lower the level gradually. Leave the simulation running long enough for the firmware to form a consumption trend; then check the calculated runtime estimate.
-8. Open the dashboard with `?view=mobile`. It should be read-only and link to Wokwi. Stop the simulator; after about 10 seconds without a new feed record, the dashboard should label data stale.
+1. Add matching Adafruit IO username, key, and feed key to Streamlit secrets and private Wokwi `secrets.h`.
+2. Start Wokwi. Confirm Wi-Fi and MQTT connect, and that the Serial Monitor prints `Cloud update sent`.
+3. Open the dashboard. It should show **LIVE**, fuel in litres and percent, generator and pump state, runtime, and the level graph.
+4. Move the distance slider, or enter a distance such as `55` in the Serial Monitor. Confirm the LCD/LEDs update and the values/graph follow shortly. Enter `AUTO` to return to the slider.
+5. Test pump hysteresis: it turns ON at or below 20% and turns OFF only above 90%.
+6. Turn the generator OFF and lower the level by more than five percentage points within one minute. Confirm the firmware alarm and dashboard suspected-theft interpretation.
+7. Turn the generator ON and lower the level gradually. Leave the simulation running long enough for the firmware to form a consumption trend, then check the runtime estimate.
+8. Stop Wokwi. After about 8 seconds without new feed records, the dashboard should flag the values as stale.
 
 ## Troubleshooting and limits
 
-- **No HTTP 200:** confirm Wi-Fi, username, AIO key, feed key, and TLS root CA. Read the HTTP status logged by Wokwi and verify that the AIO key has write access.
-- **Manual input is waiting for acknowledgment:** confirm the `tank-manual-ack` feed exists and the dashboard is running with matching AIO credentials. If you use a different acknowledgment feed, set the same `AIO_ACK_FEED_KEY` in Streamlit secrets and Wokwi's private `secrets.h`.
-- **Slow Serial Monitor updates:** the local sensor and control loop runs continuously, but the HTTPS publish is synchronous and can block while connecting to Adafruit IO. The 3-second publish interval is a target minimum, not a guarantee; network/TLS time and the 5-second request timeout can stretch the time between completed uploads. The JSON line is printed immediately before each upload attempt.
-- **Feed updates but dashboard waits:** confirm Streamlit secrets exactly match the account and feed key, and that the feed's `value` contains the JSON object above.
-- **Dashboard shows stale data:** check the feed's latest record timestamp and whether Wokwi continues publishing. The page retains previous values after a request failure but explicitly flags them as stale and reports the error.
-- **Generator switch warning:** re-import the corrected `diagram.json`; its switch common is on GPIO 12 and outer pins connect to 3V3/GND.
-- **No runtime estimate:** the firmware requires enough valid generator-ON consumption history to estimate a rate.
-- **ML is not used in this live dashboard:** theft detection follows the specified deterministic >5%-within-60-seconds rule. The separate offline synthetic model is not a validated real-world theft classifier.
+- **MQTT connection does not succeed:** confirm Wi-Fi is connected, the username/key are correct, the `tank-telemetry` feed exists, the root CA is current and complete, and the device clock has synchronized. Keep TLS verification enabled.
+- **Feed updates but dashboard waits:** confirm Streamlit secrets match the same account and feed key, and that the feed's `value` contains the JSON object above.
+- **Dashboard shows stale data:** check the feed's latest record and whether Wokwi continues to publish. The page retains prior values after a request failure, flags them as stale, and reports the error.
+- **Update rate is limited:** the sketch publishes one feed point per update, every 2.2 seconds. Adafruit IO limits are shared across devices using the account; do not lower the interval without checking current terms.
+- **Generator switch warning:** use the provided `diagram.json`; its switch common is on GPIO 12 and outer pins connect to 3V3/GND.
+- **No runtime estimate:** the firmware needs enough valid generator-ON fuel-consumption history to estimate a rate.
+- **ML is not used in this live dashboard:** theft detection follows the deterministic >5%-within-60-seconds rule. The separate offline synthetic model is not a validated real-world classifier.
+
+The original HTTPS/acknowledgment sketch remains in `firmware/wokwi/`; the offline version remains in `firmware/wokwi-local-only/`.

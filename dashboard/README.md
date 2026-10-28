@@ -1,21 +1,19 @@
-# Web dashboards
+# Live dashboard
 
-## Live Adafruit IO monitor
+Deploy `app.py` to Streamlit Community Cloud and add the Adafruit IO secrets listed in [`../docs/integration.md`](../docs/integration.md). The dashboard reads recent records from the `tank-telemetry` feed every 2 seconds.
 
-Deploy `app.py` to Streamlit Community Cloud and add the Adafruit IO secrets listed in [`../docs/integration.md`](../docs/integration.md). The ESP32 publishes one JSON telemetry value to the `tank-telemetry` feed every 3 seconds; the dashboard reads recent feed data at the same interval.
+The single-page dashboard shows the latest tank level, litres, generator and pump state, runtime estimate, feed freshness, and plain-language interpretation on the left, with the fuel-level graph on the right. On mobile, the values and graph stack vertically. The page does not embed Wokwi; open the simulation separately when changing the sensor slider or switch.
 
-The responsive dashboard prioritizes current fuel, generator and pump state, calculated runtime, feed freshness, rule-based interpretation, and a fuel-level graph. Refill and firmware theft events are marked on the graph when present. The 3D tank viewer is deferred and is not a dependency of the live monitor.
+The separate cloud-enabled Wokwi project in [`../firmware/wokwi-cloud-fast/`](../firmware/wokwi-cloud-fast/) publishes JSON snapshots over a persistent TLS MQTT connection about every 2.2 seconds. That is approximately 27 updates per minute, allowing some headroom under Adafruit IO's current free-account limit of 30 data points per minute. The dashboard flags data older than 8 seconds as stale. Cloud and browser latency can vary.
 
-On desktop, the live layout starts with interpretation and graph stacked in the left 25% and Wokwi in the right 75%. Drag the vertical divider to resize the left and right areas, and drag the horizontal divider to resize the interpretation and graph panels. The splitters remain in place while telemetry refreshes. Add `?view=mobile` for the read-only monitor and a link to open Wokwi separately. The Wokwi project is separate from Git; copy the updated sketch, corrected diagram, and private Adafruit settings into Wokwi.
-
-The dashboard uses the explicit rule “more than 5 percentage points in 60 seconds while generator OFF” for suspected theft. The offline simulator's ML model is separate and is not a validated real-world classifier.
+The dashboard uses the specified rule of more than 5 percentage points of fuel loss within 60 seconds while the generator is OFF. The offline simulator's ML model is separate and is not a validated real-world classifier.
 
 ## Offline simulator and ML demonstration
 
-`simulator_app.py` is an offline demo with manual controls, scenario playback, charts, and an ML anomaly detector. It needs no Adafruit IO connection:
+The offline demo needs no Adafruit IO connection:
 
 ```text
 streamlit run dashboard/simulator_app.py
 ```
 
-The bundled model is trained on synthetic demonstration data and is not validated as a real-world theft classifier.
+It includes manual controls, scenario playback, charts, and an ML demonstration trained on synthetic data. The model is not validated as a real-world theft classifier.

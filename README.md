@@ -9,16 +9,17 @@ An ESP32-S2 Wokwi simulation that measures diesel level with an ultrasonic senso
 - Shows level and volume on an I2C LCD and indicates LOW / MEDIUM / FULL with LEDs.
 - Turns the refill pump ON at or below 20%; once on, it stays on until the level rises above 90%.
 - Detects a >5 percentage-point drop within 60 seconds while the generator is OFF.
-- Publishes one JSON telemetry record to an Adafruit IO feed over HTTPS every 3 seconds.
-- Shows fuel, generator, pump, runtime estimate, data freshness, and a live history graph in a Streamlit desktop/mobile website.
-- Embeds the Wokwi simulator on desktop; the `?view=mobile` view is read-only.
+- Publishes one JSON telemetry record to Adafruit IO over a persistent TLS MQTT connection about every 2.2 seconds.
+- Shows the latest fuel, generator, pump, runtime estimate, data freshness, and a live history graph in a responsive Streamlit dashboard.
+- Displays latest values to the left of the graph on desktop; the panels stack on mobile. Open Wokwi separately.
 
 ## Repository layout
 
 ```text
 firmware/wokwi/            ESP32 sketch, Wokwi circuit, libraries, secrets template
 firmware/wokwi-local-only/ Standalone Wokwi demo with no Wi-Fi or cloud
-dashboard/app.py           Live desktop and read-only mobile dashboard
+firmware/wokwi-cloud-fast/ Separate Wokwi variant with faster MQTT cloud updates
+dashboard/app.py           Responsive live dashboard
 dashboard/simulator_app.py Offline scenario and synthetic ML demonstration
 dashboard/assets/          3D tank viewer
 dashboard/models/          Synthetic demonstration model
@@ -30,13 +31,13 @@ requirements.txt            Python dependencies
 
 ## Live dashboard setup
 
-1. Create Adafruit IO feeds with keys `tank-telemetry` and `tank-manual-ack`; see [`docs/integration.md`](docs/integration.md).
+1. Create an Adafruit IO feed with key `tank-telemetry`; see [`docs/integration.md`](docs/integration.md).
 2. Deploy this repository to Streamlit Community Cloud with `dashboard/app.py` as the app file.
 3. Add `AIO_USERNAME`, `AIO_KEY`, and `AIO_FEED_KEY` as Streamlit app secrets.
 4. Configure the same Adafruit IO username, key, feed key, and trusted root CA certificate in a private Wokwi `secrets.h`.
-5. Copy the current `firmware/wokwi/sketch.ino` and corrected `firmware/wokwi/diagram.json` into the hosted Wokwi project, then start the simulation.
+5. Copy `firmware/wokwi-cloud-fast/sketch.ino`, `diagram.json`, and `libraries.txt` into a separate hosted Wokwi project, add private credentials, then start the simulation.
 
-The firmware writes sensor readings every 3 seconds. A Serial Monitor distance entry is sent once, then Wokwi waits for the dashboard to acknowledge it through `tank-manual-ack` before requesting the next number. The dashboard polls telemetry every 3 seconds. The simulated tank capacity is 100 L: 5 cm is full, 105 cm is empty, and 55 cm is about 50 L. Expect a few seconds of end-to-end delay depending on network and hosting conditions. The dashboard chart uses recent feed history and does not depend on a 3D model.
+The cloud-enabled firmware publishes one sensor snapshot about every 2.2 seconds, remaining below the current 30-data-points-per-minute Adafruit IO free-tier limit. The dashboard polls every 2 seconds and marks data older than 8 seconds as stale. A Serial Monitor distance entry stays active until `AUTO` returns control to the ultrasonic slider. The 100 L tank calibration is 5 cm full, 105 cm empty, and 55 cm about 50 L. Network and hosting latency still apply.
 
 Full setup and troubleshooting instructions are in [`docs/integration.md`](docs/integration.md). Never commit Adafruit IO keys or expose them in a public Wokwi project.
 

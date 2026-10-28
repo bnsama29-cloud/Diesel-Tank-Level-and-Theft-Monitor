@@ -1,61 +1,24 @@
 (() => {
-  const dashboard = document.getElementById("dashboard");
-  const leftColumn = document.getElementById("left-column");
-  const columnSplitter = document.getElementById("column-splitter");
-  const rowSplitter = document.getElementById("row-splitter");
-  const sizes = { left: 25, interpretation: 42 };
-  const frameHeight = Math.max(620, Math.min(1100, window.screen.availHeight - 180));
   const $ = id => document.getElementById(id);
-
   const setText = (id, value) => { $(id).textContent = value; };
+
   const setFrameHeight = () => {
+    const height = window.innerWidth <= 760
+      ? 1060
+      : Math.max(620, Math.min(900, window.screen.availHeight - 170));
     window.parent.postMessage({
       isStreamlitMessage: true,
       type: "streamlit:setFrameHeight",
-      height: frameHeight,
+      height,
     }, "*");
   };
 
-  const applySizes = () => {
-    dashboard.style.setProperty("--left-size", `${sizes.left}%`);
-    dashboard.style.setProperty("--interpretation-size", `${sizes.interpretation}%`);
-  };
-  applySizes();
-
-  const installDrag = (splitter, axis) => {
-    splitter.addEventListener("pointerdown", event => {
-      event.preventDefault();
-      splitter.classList.add("dragging");
-      splitter.setPointerCapture(event.pointerId);
-    });
-    splitter.addEventListener("pointermove", event => {
-      if (!splitter.hasPointerCapture(event.pointerId)) return;
-      if (axis === "column") {
-        const rect = dashboard.getBoundingClientRect();
-        sizes.left = Math.min(45, Math.max(18, ((event.clientX - rect.left) / rect.width) * 100));
-      } else {
-        const rect = leftColumn.getBoundingClientRect();
-        sizes.interpretation = Math.min(70, Math.max(25, ((event.clientY - rect.top) / rect.height) * 100));
-      }
-      applySizes();
-    });
-    const stopDrag = () => {
-      splitter.classList.remove("dragging");
-      if ($("history-chart")._fullLayout && window.Plotly) {
-        window.Plotly.Plots.resize($("history-chart"));
-      }
-    };
-    splitter.addEventListener("pointerup", stopDrag);
-    splitter.addEventListener("pointercancel", stopDrag);
-  };
-  installDrag(columnSplitter, "column");
-  installDrag(rowSplitter, "row");
-
-  $("enlarge-simulation").addEventListener("click", () => {
-    const panel = $("simulation-panel");
-    if (document.fullscreenElement) document.exitFullscreen();
-    else if (panel.requestFullscreen) panel.requestFullscreen();
-  });
+  const escapeHtml = value => String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 
   const render = args => {
     const latest = args.latest;
@@ -70,7 +33,7 @@
 
     if (!latest) {
       notice.classList.add("error");
-      notice.innerHTML = "<strong>Waiting for telemetry</strong><span>Start Wokwi to receive live readings.</span>";
+      notice.innerHTML = "<strong>Waiting for telemetry</strong><span>Start the Wokwi simulation to receive live readings.</span>";
       setText("litres", "—");
       setText("level", "—");
       setText("generator", "—");
@@ -79,7 +42,7 @@
       setText("sensor-note", "No sensor reading received yet.");
     } else {
       const stale = args.freshness !== "LIVE";
-      const theft = args.status === "Suspected theft";
+      const theft = args.status === "Suspected theft" || latest.theft_alarm;
       notice.classList.add(stale || theft ? "danger" : latest.level_percent <= 20 ? "warning" : "normal");
       notice.innerHTML = `<strong>${escapeHtml(stale ? `DATA STALE · ${args.status}` : args.status)}</strong><span>${escapeHtml(args.explanation)}${stale ? " Displayed values are the last received, not current." : ""}</span>`;
       setText("litres", `${latest.litres.toFixed(1)} L`);
@@ -99,17 +62,16 @@
     if (args.chart && window.Plotly) {
       chart.hidden = false;
       emptyChart.hidden = true;
-      const data = args.chart.data || [];
       const layout = {
         ...(args.chart.layout || {}),
         autosize: true,
-        height: undefined,
+        height: window.innerWidth <= 760 ? 430 : 560,
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { color: "#d9e6f2" },
         margin: { l: 42, r: 12, t: 38, b: 32 },
       };
-      window.Plotly.react(chart, data, layout, {
+      window.Plotly.react(chart, args.chart.data || [], layout, {
         responsive: true,
         displayModeBar: false,
       });
@@ -120,17 +82,10 @@
     setFrameHeight();
   };
 
-  const escapeHtml = value => String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-
   render({
     latest: null,
     status: "Waiting for telemetry",
-    explanation: "Start Wokwi to receive live readings.",
+    explanation: "Start the Wokwi simulation to receive live readings.",
     freshness: "WAITING",
     age_seconds: null,
     chart: null,
@@ -141,6 +96,11 @@
     if (event.data && event.data.type === "streamlit:render") {
       render(event.data.args);
     }
+  });
+  window.addEventListener("resize", () => {
+    setFrameHeight();
+    const chart = $("history-chart");
+    if (chart._fullLayout && window.Plotly) window.Plotly.Plots.resize(chart);
   });
   window.parent.postMessage({
     isStreamlitMessage: true,

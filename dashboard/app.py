@@ -17,11 +17,11 @@ from monitor_logic import detect_rapid_drop
 from resizable_dashboard import render_resizable_dashboard
 
 
-POLL_INTERVAL_SECONDS = 3
+POLL_INTERVAL_SECONDS = 2
 THEFT_WINDOW_SECONDS = 60
 THEFT_DROP_PERCENT = 5.0
-STALE_AFTER_SECONDS = 10
-HISTORY_LIMIT = 120
+STALE_AFTER_SECONDS = 8
+HISTORY_LIMIT = 180
 
 
 def derive_theft_alarm(history: list[dict[str, Any]]) -> bool:
@@ -228,6 +228,7 @@ def render_live_dashboard(
         history = st.session_state.get("telemetry_history", [])
 
     fetch_error = st.session_state.get("telemetry_fetch_error")
+    manual_ack_error = None
     if not history:
         if resizable_layout:
             render_resizable_dashboard(
@@ -254,7 +255,6 @@ def render_live_dashboard(
         return
 
     latest = history[-1]
-    manual_ack_error = None
     if not st.session_state.get("telemetry_fetch_error"):
         manual_ack_error = acknowledge_manual_reading(
             username,
@@ -427,10 +427,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.title("⛽ Diesel Tank Monitor")
-mobile_view = st.query_params.get("view", "desktop") == "mobile"
 st.caption(
-    f"{'Read-only live monitor' if mobile_view else 'Wokwi simulation · Live monitor'}"
-    " · 100 L tank · Theft rule: >5 percentage points in 60 seconds while generator OFF"
+    "Live readings and fuel-level history · 100 L tank · "
+    "Theft rule: >5 percentage points in 60 seconds while generator OFF"
 )
 
 try:
@@ -440,20 +439,13 @@ try:
 except (KeyError, FileNotFoundError):
     st.error(
         "Adafruit IO is not configured. Add AIO_USERNAME, AIO_KEY, and "
-        "AIO_FEED_KEY in Streamlit Community Cloud → App settings → Secrets. "
-        "AIO_ACK_FEED_KEY is optional and defaults to tank-manual-ack."
+        "AIO_FEED_KEY in Streamlit Community Cloud → App settings → Secrets."
     )
     st.stop()
 
-if mobile_view:
-    st.link_button(
-        "Open Wokwi simulation", "https://wokwi.com/projects/478875514435866625"
-    )
-    render_live_dashboard(aio_username, aio_key, aio_feed)
-else:
-    render_live_dashboard(
-        aio_username,
-        aio_key,
-        aio_feed,
-        resizable_layout=True,
-    )
+render_live_dashboard(
+    aio_username,
+    aio_key,
+    aio_feed,
+    resizable_layout=True,
+)

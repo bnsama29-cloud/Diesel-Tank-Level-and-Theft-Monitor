@@ -12,7 +12,7 @@ Save Wokwi, Adafruit IO, and dashboard screenshots under `docs/evidence/`. Do no
 | Generator ON | Switch ON, stable/gradual level | Generator ON, no theft alarm | Pending: the corrected local wiring below still needs to be reloaded into the hosted Wokwi project and verified. |
 | Theft alarm | Generator OFF, >5 point drop in 60 seconds | `THEFT?`, buzzer, `theft_alarm: true` in the JSON feed | Pending |
 | Empty tank | Distance at/above 105 cm | 0%, 0 L, pump ON | Pending |
-| Cloud integration | Wokwi posts one JSON point to the `tank-telemetry` Adafruit IO feed every 3 seconds | Dashboard receives the new feed record and marks it live | Pending: the current single-feed route still needs live verification. |
+| Cloud integration | `firmware/wokwi-cloud-fast/` publishes one JSON point over persistent TLS MQTT about every 2.2 seconds | Responsive dashboard receives the new feed record and marks it live | Pending: the MQTT firmware and hosted dashboard still need live end-to-end verification. |
 | Dashboard readings + graph | Open deployed dashboard and vary the Wokwi distance slider | Values and graph follow the latest JSON feed; stale status appears when publishing stops | Pending |
 
 Suggested filenames for the remaining live captures: `04-pump-hysteresis-wokwi.png`, `05-generator-on-wokwi.png`, `06-theft-alarm-wokwi.png`, `07-empty-tank-wokwi.png`, `08-adafruit-json-feed.png`, and `09-dashboard-live-graph.png`.
