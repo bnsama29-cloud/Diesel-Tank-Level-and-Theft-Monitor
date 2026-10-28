@@ -426,7 +426,16 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.title("⛽ Diesel Tank Monitor")
+title_column, refresh_column = st.columns([0.9, 0.1])
+with title_column:
+    st.title("⛽ Diesel Tank Monitor")
+with refresh_column:
+    st.button(
+        "↻",
+        key="manual-refresh",
+        help="Refresh live readings now",
+        use_container_width=True,
+    )
 st.caption(
     "Live readings and fuel-level history · 100 L tank · "
     "Theft rule: >5 percentage points in 60 seconds while generator OFF"
