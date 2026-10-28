@@ -23,7 +23,7 @@
   </defs>
   <rect class="bg" x="0" y="0" width="1500" height="2570" rx="0"/>
   <text class="title" x="750" y="68" text-anchor="middle">Diesel Tank Monitor — Demo Flow</text>
-  <text class="subtitle" x="750" y="106" text-anchor="middle">100 L model · 5 cm full · 105 cm empty · Manual distance remains active until AUTO</text>
+  <text class="subtitle" x="750" y="106" text-anchor="middle">Type DEMO after LIVE · each case is held for 10 seconds · enter a number, AUTO, or STOP to cancel</text>
 
   <rect class="start" x="320" y="145" width="860" height="100" rx="24"/>
   <text class="text" x="750" y="185"><tspan x="750">PREPARE: Adafruit feed, private credentials,</tspan><tspan x="750" dy="28">Wokwi cloud sketch, and Streamlit secrets</tspan></text>

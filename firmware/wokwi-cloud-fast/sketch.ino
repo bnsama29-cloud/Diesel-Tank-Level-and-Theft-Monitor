@@ -43,6 +43,7 @@ const unsigned long TELEMETRY_INTERVAL_MS = 2200UL;
 const unsigned long WIFI_RETRY_INTERVAL_MS = 10000UL;
 const unsigned long MQTT_RETRY_INTERVAL_MS = 8000UL;
 const unsigned long THEFT_WINDOW_MS = 60000UL;
+const unsigned long DEMO_CASE_DURATION_MS = 10000UL;
 const int HISTORY_SIZE = 61;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -65,6 +66,37 @@ bool pumpOn = false;
 bool localTheftAlarm = false;
 bool manualDistanceMode = false;
 bool mqttConnectionAttempted = false;
+bool demoRunning = false;
+bool demoGeneratorOverride = false;
+bool demoGeneratorOn = false;
+int demoStepIndex = 0;
+unsigned long demoStepStartedAt = 0;
+
+struct DemoStep {
+  const char* label;
+  float distanceCm;
+  bool generatorOn;
+  bool resetHistory;
+  bool clearAlarm;
+};
+
+const DemoStep DEMO_STEPS[] = {
+    {"Normal level: about 50% / 50 L", 55.0f, true, true, true},
+    {"Pump ON at 20%", 85.0f, false, false, false},
+    {"Hysteresis hold: pump stays ON", 75.0f, false, false, false},
+    {"Pump OFF above 90%", 14.0f, false, false, false},
+    {"Theft test baseline: generator OFF", 55.0f, false, true, true},
+    {"Theft test drop: expect THEFT?", 65.0f, false, false, false},
+    {"Theft alarm cleared", 65.0f, false, false, true},
+    {"Runtime baseline: generator ON", 45.0f, true, true, true},
+    {"Runtime trend 1/6", 45.2f, true, false, false},
+    {"Runtime trend 2/6", 45.4f, true, false, false},
+    {"Runtime trend 3/6", 45.6f, true, false, false},
+    {"Runtime trend 4/6", 45.8f, true, false, false},
+    {"Runtime trend 5/6", 46.0f, true, false, false},
+    {"Runtime trend 6/6", 46.2f, true, false, false},
+};
+const int DEMO_STEP_COUNT = sizeof(DEMO_STEPS) / sizeof(DEMO_STEPS[0]);
 
 unsigned long lastSampleTime = 0;
 unsigned long lastSerialReportTime = 0;
@@ -75,6 +107,63 @@ unsigned long lastMqttAttemptTime = 0;
 char serialInput[32];
 size_t serialInputLength = 0;
 bool serialInputOverflow = false;
+
+void clearLevelHistory() {
+  historyWriteIndex = 0;
+  historyCount = 0;
+  lastSampleTime = 0;
+}
+
+void applyDemoStep(int stepIndex) {
+  const DemoStep& step = DEMO_STEPS[stepIndex];
+  demoStepIndex = stepIndex;
+  demoStepStartedAt = millis();
+  manualDistanceMode = true;
+  manualDistanceCm = step.distanceCm;
+  demoGeneratorOverride = true;
+  demoGeneratorOn = step.generatorOn;
+  if (step.resetHistory) clearLevelHistory();
+  if (step.clearAlarm) localTheftAlarm = false;
+  lastTelemetryTime = millis() - TELEMETRY_INTERVAL_MS;
+
+  Serial.printf("\nDEMO CASE %d/%d: %s\n", stepIndex + 1,
+                DEMO_STEP_COUNT, step.label);
+  Serial.printf("Distance: %.1f cm | Generator: %s\n",
+                step.distanceCm, step.generatorOn ? "ON" : "OFF");
+  Serial.println("Allow 10 seconds for dashboard updates before the next case.");
+}
+
+void startDemo() {
+  if (demoRunning) {
+    Serial.println("The scripted demo is already running. Enter STOP to cancel.");
+    return;
+  }
+  demoRunning = true;
+  Serial.println("\nStarting scripted demo. Each case runs for 10 seconds.");
+  Serial.println("Enter a distance to switch back to manual control, AUTO for the sensor, or STOP to cancel.");
+  applyDemoStep(0);
+}
+
+void stopDemo(bool resumeSensor, const char* reason) {
+  if (demoRunning) Serial.println(reason);
+  demoRunning = false;
+  demoGeneratorOverride = false;
+  if (resumeSensor) manualDistanceMode = false;
+}
+
+void advanceDemoIfReady() {
+  if (!demoRunning ||
+      millis() - demoStepStartedAt < DEMO_CASE_DURATION_MS) {
+    return;
+  }
+
+  const int nextStep = demoStepIndex + 1;
+  if (nextStep >= DEMO_STEP_COUNT) {
+    stopDemo(true, "Scripted demo complete. Returning to the HC-SR04 slider.");
+    return;
+  }
+  applyDemoStep(nextStep);
+}
 
 int relayLevel(bool on) {
   if (RELAY_ACTIVE_LOW) return on ? LOW : HIGH;
@@ -103,12 +192,22 @@ void processSerialCommand(char* command) {
     *cursor = (char)toupper((unsigned char)*cursor);
   }
 
+  if (strcmp(command, "DEMO") == 0) {
+    startDemo();
+    return;
+  }
+  if (strcmp(command, "STOP") == 0) {
+    stopDemo(true, "Scripted demo stopped. Returning to the HC-SR04 slider.");
+    return;
+  }
   if (strcmp(command, "AUTO") == 0) {
+    stopDemo(false, "Scripted demo stopped.");
     manualDistanceMode = false;
     Serial.println("Input mode: HC-SR04 sensor slider.");
     return;
   }
   if (strcmp(command, "CLEAR") == 0) {
+    stopDemo(false, "Scripted demo stopped.");
     localTheftAlarm = false;
     Serial.println("Theft alarm cleared.");
     return;
@@ -120,10 +219,11 @@ void processSerialCommand(char* command) {
   if (parsedEnd == command || !parsedEnd || *parsedEnd != '\0' ||
       !isfinite(requestedDistance) || requestedDistance < 0.0f ||
       requestedDistance > EMPTY_DISTANCE_CM) {
-    Serial.println("Invalid command. Enter 0-105 cm, AUTO, or CLEAR.");
+    Serial.println("Invalid command. Enter 0-105 cm, AUTO, CLEAR, DEMO, or STOP.");
     return;
   }
 
+  stopDemo(false, "Scripted demo stopped; switching to manual distance input.");
   manualDistanceCm = requestedDistance;
   manualDistanceMode = true;
   Serial.printf("Input mode: MANUAL - distance set to %.1f cm.\n",
@@ -136,7 +236,7 @@ void readSerialCommands() {
     if (value == '\r') continue;
     if (value == '\n') {
       if (serialInputOverflow) {
-        Serial.println("Input too long. Enter 0-105, AUTO, or CLEAR.");
+        Serial.println("Input too long. Enter 0-105, AUTO, CLEAR, DEMO, or STOP.");
       } else {
         serialInput[serialInputLength] = '\0';
         processSerialCommand(serialInput);
@@ -154,7 +254,9 @@ void readSerialCommands() {
 }
 
 void updateInputsAndLevel() {
-  generatorOn = digitalRead(GENERATOR_SWITCH_PIN) == HIGH;
+  generatorOn = demoGeneratorOverride
+                    ? demoGeneratorOn
+                    : digitalRead(GENERATOR_SWITCH_PIN) == HIGH;
   if (manualDistanceMode) {
     distanceCm = manualDistanceCm;
     sensorOK = true;
@@ -303,6 +405,11 @@ void printStatus() {
   }
   Serial.println("Pump thresholds: ON at <=20%; OFF only above 90%.");
   Serial.println("Theft rule: generator OFF and drop >5 percentage points in 60 sec.");
+  if (demoRunning) {
+    Serial.printf("Scripted demo case: %d/%d - %s\n",
+                  demoStepIndex + 1, DEMO_STEP_COUNT,
+                  DEMO_STEPS[demoStepIndex].label);
+  }
   Serial.println("===============================");
 }
 
@@ -385,8 +492,8 @@ void setup() {
 
   Serial.println();
   Serial.println("Diesel tank monitor - Wokwi cloud MQTT mode.");
-  Serial.println("Use HC-SR04 distance slider, or enter 0-105 cm in Serial Monitor.");
-  Serial.println("Enter AUTO to return to the sensor; CLEAR resets the theft alarm.");
+  Serial.println("Use HC-SR04 slider or enter 0-105 cm in Serial Monitor.");
+  Serial.println("Commands: AUTO (sensor), CLEAR (alarm), DEMO (10-sec cases), STOP (cancel).");
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
@@ -405,6 +512,7 @@ void setup() {
 
 void loop() {
   readSerialCommands();
+  advanceDemoIfReady();
   updateInputsAndLevel();
   updatePumpAndIndicators();
 

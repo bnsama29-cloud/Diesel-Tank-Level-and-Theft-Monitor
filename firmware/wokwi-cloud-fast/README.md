@@ -5,6 +5,7 @@ This is a separate cloud-enabled copy of the local Wokwi demo. The original offl
 ## What it does
 
 - Keeps the ultrasonic distance slider and Serial Monitor distance entry (`0` to `105` cm); enter `AUTO` to return to the slider and `CLEAR` to reset the theft alarm.
+- Adds a `DEMO` Serial Monitor command that runs the demonstration cases automatically, holding each case for 10 seconds so the dashboard has time to receive and display multiple updates. The generator-ON runtime portion takes about 70 seconds; an estimate is expected only after at least 60 seconds of measurable generator-ON fuel decline.
 - Preserves the 100 L model, pump hysteresis, generator switch, LEDs, LCD, theft alarm, and runtime estimate.
 - Publishes one JSON telemetry snapshot to the Adafruit IO `tank-telemetry` feed over a persistent TLS MQTT connection about every 2.2 seconds.
 - Prints readings and cloud connection/publish status in the Serial Monitor.
@@ -26,6 +27,11 @@ The feed contains one JSON object per update with the current timestamp, sensor 
 
 ## Demo input
 
+- Enter `DEMO` in the Serial Monitor to run the scripted sequence: normal reading, pump ON, hysteresis hold, pump OFF, theft baseline/drop/reset, and generator-ON runtime trend. The script runs for about 140 seconds and publishes to the same feed used by the dashboard.
+- Each case lasts at least 10 seconds; the dashboard refreshes every 2 seconds. Watch the Serial Monitor for the case name and `Cloud update sent`, and watch the dashboard's LIVE values and graph. The device does not receive an acknowledgment that the dashboard has rendered a case.
+- During the scripted demo, the sketch controls the simulated generator state and manual distance. Enter a number to cancel the sequence and continue with manual distance input, or enter `AUTO`/`STOP` to cancel and resume the sensor slider. `CLEAR` cancels the demo and clears the alarm.
+- You can still use the original interactive workflow at any time: enter a distance, use `AUTO` for the HC-SR04 slider, or use `CLEAR` to reset the alarm. Do not start a second Wokwi publisher on the same Adafruit account/feed during this demonstration.
+- The firmware does not receive a dashboard-render acknowledgment; it holds each case for 10 seconds while the dashboard polls every 2 seconds. Confirm `Cloud update sent` in Serial Monitor and **LIVE** on the dashboard.
 - Adjust the HC-SR04 slider, or enter a distance such as `85` in Serial Monitor.
 - Enter `AUTO` to resume using the ultrasonic slider.
 - Set the generator switch ON for a gradual decrease to collect runtime history.
