@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="2570" viewBox="0 0 1500 2570" role="img" aria-labelledby="title description">
+  <title id="title">Diesel Tank Monitor Demonstration Flowchart</title>
+  <desc id="description">A step-by-step flowchart for setting up Wokwi and the dashboard, demonstrating level readings, pump hysteresis, theft alert, runtime estimate, and graph.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L11,6 L1,11 z" fill="#46617c"/>
+    </marker>
+    <style>
+      .bg { fill: #f3f7fb; }
+      .title { font: 700 40px Arial, sans-serif; fill: #102a43; }
+      .subtitle { font: 20px Arial, sans-serif; fill: #486581; }
+      .box { fill: #fff; stroke: #2f80a8; stroke-width: 3; }
+      .start { fill: #e4f7ed; stroke: #26915e; stroke-width: 3; }
+      .decision { fill: #fff4d6; stroke: #ca8a04; stroke-width: 3; }
+      .alert { fill: #fff0ef; stroke: #d04444; stroke-width: 3; }
+      .success { fill: #e8f7f5; stroke: #188879; stroke-width: 3; }
+      .text { font: 600 21px Arial, sans-serif; fill: #17324d; text-anchor: middle; }
+      .small { font: 18px Arial, sans-serif; fill: #334e68; text-anchor: middle; }
+      .label { font: 700 17px Arial, sans-serif; fill: #334e68; }
+      .line { fill: none; stroke: #46617c; stroke-width: 4; marker-end: url(#arrow); }
+      .lineplain { fill: none; stroke: #46617c; stroke-width: 4; }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1500" height="2570" rx="0"/>
+  <text class="title" x="750" y="68" text-anchor="middle">Diesel Tank Monitor — Demo Flow</text>
+  <text class="subtitle" x="750" y="106" text-anchor="middle">100 L model · 5 cm full · 105 cm empty · Manual distance remains active until AUTO</text>
+
+  <rect class="start" x="320" y="145" width="860" height="100" rx="24"/>
+  <text class="text" x="750" y="185"><tspan x="750">PREPARE: Adafruit feed, private credentials,</tspan><tspan x="750" dy="28">Wokwi cloud sketch, and Streamlit secrets</tspan></text>
+  <path class="line" d="M750 245 V285"/>
+
+  <rect class="box" x="320" y="295" width="860" height="100" rx="20"/>
+  <text class="text" x="750" y="335"><tspan x="750">Start Wokwi and Serial Monitor</tspan><tspan class="small" x="750" dy="29">Wait for Wi-Fi / MQTT connection and “Cloud update sent”</tspan></text>
+  <path class="line" d="M750 395 V435"/>
+
+  <rect class="box" x="320" y="445" width="860" height="85" rx="20"/>
+  <text class="text" x="750" y="497">Open the dashboard and check data freshness</text>
+  <path class="line" d="M750 530 V570"/>
+
+  <polygon class="decision" points="750,570 930,655 750,740 570,655"/>
+  <text class="text" x="750" y="648"><tspan x="750">Dashboard</tspan><tspan x="750" dy="27">shows LIVE?</tspan></text>
+
+  <path class="line" d="M930 655 H1080"/>
+  <text class="label" x="972" y="640">NO</text>
+  <rect class="alert" x="1090" y="595" width="350" height="125" rx="18"/>
+  <text class="text" x="1265" y="636"><tspan x="1265">Check publish log,</tspan><tspan x="1265" dy="27">feed key, credentials,</tspan><tspan x="1265" dy="27">and network</tspan></text>
+  <path class="lineplain" d="M1265 595 V345 H1190"/>
+  <path class="line" d="M1190 345 H1180"/>
+
+  <path class="line" d="M750 740 V785"/>
+  <text class="label" x="770" y="770">YES</text>
+  <rect class="success" x="320" y="795" width="860" height="95" rx="20"/>
+  <text class="text" x="750" y="835"><tspan x="750">Normal reading: generator ON, enter 55 cm</tspan><tspan class="small" x="750" dy="29">Expect about 50% / 50 L on Serial Monitor and dashboard</tspan></text>
+  <path class="line" d="M750 890 V930"/>
+  <rect class="box" x="320" y="940" width="860" height="85" rx="20"/>
+  <text class="text" x="750" y="975"><tspan x="750">Confirm the graph starts after at least two readings</tspan><tspan class="small" x="750" dy="27">Use ↻ for a manual refresh; automatic refresh continues</tspan></text>
+  <path class="line" d="M750 1025 V1065"/>
+
+  <rect class="box" x="320" y="1075" width="860" height="88" rx="20"/>
+  <text class="text" x="750" y="1110"><tspan x="750">Pump ON test: generator OFF, enter 85 cm</tspan><tspan class="small" x="750" dy="27">About 20% — pump turns ON</tspan></text>
+  <path class="line" d="M750 1163 V1198"/>
+  <rect class="box" x="320" y="1208" width="860" height="88" rx="20"/>
+  <text class="text" x="750" y="1243"><tspan x="750">Hysteresis hold: enter 75 cm</tspan><tspan class="small" x="750" dy="27">About 30% — pump remains ON</tspan></text>
+  <path class="line" d="M750 1296 V1331"/>
+  <rect class="success" x="320" y="1341" width="860" height="88" rx="20"/>
+  <text class="text" x="750" y="1376"><tspan x="750">Pump OFF test: enter 14 cm</tspan><tspan class="small" x="750" dy="27">About 91% — pump turns OFF above 90%</tspan></text>
+  <path class="line" d="M750 1429 V1469"/>
+
+  <rect class="alert" x="320" y="1479" width="860" height="120" rx="20"/>
+  <text class="text" x="750" y="1520"><tspan x="750">Theft-alarm test: generator OFF</tspan><tspan class="small" x="750" dy="29">Enter 55 cm, wait a few seconds, then enter 65 cm</tspan><tspan class="small" x="750" dy="25">Expect THEFT? in Serial Monitor and dashboard warning</tspan></text>
+  <path class="line" d="M750 1599 V1639"/>
+  <rect class="box" x="320" y="1649" width="860" height="80" rx="20"/>
+  <text class="text" x="750" y="1698">Enter CLEAR to reset the latched alarm</text>
+  <path class="line" d="M750 1729 V1769"/>
+
+  <rect class="box" x="320" y="1779" width="860" height="120" rx="20"/>
+  <text class="text" x="750" y="1820"><tspan x="750">Runtime test: generator ON</tspan><tspan class="small" x="750" dy="29">Enter 45 cm, wait, then gradually increase distance</tspan><tspan class="small" x="750" dy="25">Fuel must decline measurably while generator stays ON</tspan></text>
+  <path class="line" d="M750 1899 V1939"/>
+  <polygon class="decision" points="750,1939 930,2024 750,2109 570,2024"/>
+  <text class="text" x="750" y="2017"><tspan x="750">Runtime</tspan><tspan x="750" dy="27">number shown?</tspan></text>
+  <path class="line" d="M930 2024 H1080"/>
+  <text class="label" x="972" y="2009">NO</text>
+  <rect class="alert" x="1090" y="1964" width="350" height="125" rx="18"/>
+  <text class="text" x="1265" y="2005"><tspan x="1265">Keep generator ON;</tspan><tspan x="1265" dy="27">collect a gradual</tspan><tspan x="1265" dy="27">fuel decline</tspan></text>
+  <path class="lineplain" d="M1265 2089 V1839 H1180"/>
+  <path class="line" d="M1180 1839 H1170"/>
+  <path class="line" d="M750 2109 V2149"/>
+  <text class="label" x="770" y="2137">YES</text>
+  <rect class="success" x="320" y="2159" width="860" height="80" rx="20"/>
+  <text class="text" x="750" y="2208">Show estimated runtime on the dashboard</text>
+  <path class="line" d="M750 2239 V2279"/>
+
+  <rect class="box" x="320" y="2289" width="860" height="95" rx="20"/>
+  <text class="text" x="750" y="2329"><tspan x="750">Enter AUTO and move the HC-SR04 slider</tspan><tspan class="small" x="750" dy="29">Show new points changing the fuel-level graph</tspan></text>
+  <path class="line" d="M750 2384 V2424"/>
+  <rect class="start" x="320" y="2434" width="860" height="90" rx="24"/>
+  <text class="text" x="750" y="2471"><tspan x="750">Finish: explain thresholds, cloud latency,</tspan><tspan x="750" dy="27">and that this is a simulation</tspan></text>
+</svg>

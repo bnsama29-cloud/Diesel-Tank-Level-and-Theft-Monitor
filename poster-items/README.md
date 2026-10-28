@@ -5,6 +5,8 @@ This folder contains copy-ready content and image assets for the Diesel Tank Lev
 ## Files
 
 - [`POSTER-CONTENT.md`](POSTER-CONTENT.md) — proposed poster wording, results table, demonstration steps, and diagram.
+- [`DEMO-FLOWCHART.md`](DEMO-FLOWCHART.md) — step-by-step presenter flow with an editable Mermaid version.
+- [`assets/demo-flowchart.svg`](assets/demo-flowchart.svg) — printable demonstration flowchart graphic.
 - [`assets/reference-image.jpg`](assets/reference-image.jpg) — the poster layout/template image supplied by the team.
 - [`assets/wokwi-circuit-and-code.png`](assets/wokwi-circuit-and-code.png) — supplied Wokwi editor and circuit screenshot.
 - [`assets/dashboard-with-graph.png`](assets/dashboard-with-graph.png) — supplied dashboard screenshot with the level graph.
