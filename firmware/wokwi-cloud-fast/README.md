@@ -1,6 +1,6 @@
 # Wokwi fast-cloud diesel tank monitor
 
-This is a separate cloud-enabled copy of the local Wokwi demo. The original offline project in `firmware/wokwi-local-only/` remains unchanged.
+This is the cloud-enabled Wokwi firmware for the diesel tank monitor. It publishes to Adafruit IO for the Streamlit dashboard in `dashboard/`.
 
 ## What it does
 

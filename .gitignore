@@ -3,6 +3,9 @@ firmware/wokwi-cloud-fast/secrets.h
 .streamlit/secrets.toml
 .env
 
+# Tooling state
+.clawness/
+
 # Python
 __pycache__/
 *.py[cod]
